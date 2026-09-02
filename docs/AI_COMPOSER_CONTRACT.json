@@ -1,0 +1,1070 @@
+{
+  "schema": "levelupdiag-koali.ai-composer-contract.v1",
+  "contract_version": "1.0.0",
+  "document_role": "additional_machine_readable_composition_contract",
+  "language": "fr",
+  "target_repository": "LevelUpDiag-Koali",
+  "purpose": "Guider une IA qui compose ou refactore le code de LevelUpDiag-Koali sans faire dériver l'architecture. Ce contrat complète les Markdown existants; il ne les remplace pas.",
+  "precedence": [
+    "instruction explicite la plus récente de l'utilisateur",
+    "docs/AI_COMPOSER_CONTRACT.json",
+    "documentation Markdown du dépôt",
+    "code existant lorsqu'il ne contredit pas les trois niveaux précédents"
+  ],
+  "read_first": [
+    {
+      "path": "README.md",
+      "reason": "identité et rôle du dépôt"
+    },
+    {
+      "path": "docs/02-architecture.md",
+      "reason": "architecture générale"
+    },
+    {
+      "path": "docs/03-levels-and-checks.md",
+      "reason": "contrat d'un niveau"
+    },
+    {
+      "path": "docs/05-execution-and-ordering.md",
+      "reason": "ordre et dépendances"
+    },
+    {
+      "path": "docs/06-results-and-logs.md",
+      "reason": "résultats et logs"
+    },
+    {
+      "path": "docs/07-koa-linux-integration.md",
+      "reason": "frontière avec la cible"
+    },
+    {
+      "path": "docs/09-failure-and-blocking-model.md",
+      "reason": "sémantique des verdicts"
+    },
+    {
+      "path": "docs/13-removal-before-delivery.md",
+      "reason": "exclusion avant livraison"
+    },
+    {
+      "path": "docs/15-reference.md",
+      "reason": "référence compacte"
+    }
+  ],
+  "composition_mode": {
+    "default": "minimal_change",
+    "rules": [
+      "Ne créer un fichier que s'il figure dans final_repository_layout ou si l'utilisateur l'ordonne explicitement.",
+      "Ne créer aucun framework générique, plugin system, service, daemon, base de données ou API réseau.",
+      "Ne déplacer aucune responsabilité hors de son module propriétaire sans nécessité démontrable.",
+      "Préférer une fonction simple à une nouvelle abstraction.",
+      "Préférer la bibliothèque standard Python.",
+      "Ne pas convertir LevelUpDiag-Koali en composant de kOA-Linux.",
+      "Ne pas réécrire un validateur kOA-Linux dans l'appendice; l'appeler comme processus externe.",
+      "Ne pas considérer l'absence d'une erreur comme un PASS si aucun résultat final n'a été produit."
+    ]
+  },
+  "frozen_product_decisions": {
+    "identity": "LevelUpDiag-Koali",
+    "type": "appendice autonome de développement, diagnostic et validation",
+    "target_system": "kOA-Linux",
+    "dependency_direction": "LevelUpDiag-Koali -> commandes publiques de kOA-Linux",
+    "koa_linux_dependency_on_appendix": "forbidden",
+    "runtime_dependency_from_koa_linux": "forbidden",
+    "delivery_presence": "forbidden",
+    "primary_job": [
+      "aligner une série de niveaux Python .py/.pyw",
+      "ordonner leur exécution",
+      "respecter des dépendances simples",
+      "lancer des commandes externes",
+      "capturer stdout/stderr et codes de sortie",
+      "normaliser les verdicts",
+      "centraliser les logs et rapports"
+    ],
+    "not_a_goal": [
+      "moteur de policy généraliste",
+      "système distribué",
+      "workflow engine universel",
+      "CI server",
+      "package manager",
+      "build system de kOA-Linux",
+      "autorité de release kOA-Linux",
+      "orchestrateur runtime kOA-Linux"
+    ],
+    "runtime_dependencies": "Python standard library only",
+    "gui": "Tkinter/pyw facultatif, façade sur le même core que la CLI",
+    "primary_platform": "Windows developer workstation",
+    "portability_goal": "core portable Windows/Linux/macOS lorsque cela ne complexifie pas l'architecture",
+    "python": ">=3.11"
+  },
+  "explicitly_forbidden_features": [
+    "base de données locale",
+    "serveur HTTP embarqué",
+    "API REST de LevelUpDiag-Koali",
+    "message queue",
+    "plugin discovery dynamique",
+    "chargement de code arbitraire par entry points",
+    "télémetrie distante par défaut",
+    "upload automatique de logs",
+    "modification automatique du checkout kOA-Linux",
+    "git commit/push automatique",
+    "auto-fix silencieux",
+    "shell=True dans le chemin normal d'exécution d'un check",
+    "interprétation d'un BLOCKED comme PASS",
+    "interprétation d'un check requis sans résultat comme PASS"
+  ],
+  "domain_model": {
+    "allowed_primary_entities": [
+      "Level",
+      "Run",
+      "Result",
+      "Finding",
+      "Artifact",
+      "Campaign"
+    ],
+    "definitions": {
+      "Level": "Unité déclarée dans le manifeste et exécutable indépendamment.",
+      "Run": "Exécution concrète d'un Level.",
+      "Result": "Conclusion normalisée d'un Run.",
+      "Finding": "Observation structurée associée à un Result.",
+      "Artifact": "Fichier auxiliaire produit ou référencé par un Run.",
+      "Campaign": "Regroupement simple de Runs sur une même cible."
+    },
+    "do_not_introduce_without_user_request": [
+      "Gate",
+      "Claim",
+      "PolicyEngine",
+      "EvidenceGraph",
+      "DistributedJob",
+      "Worker",
+      "AgentPool"
+    ]
+  },
+  "verdicts": {
+    "allowed": [
+      "PASS",
+      "WARN",
+      "FAIL",
+      "SKIP",
+      "BLOCKED",
+      "PARTIAL",
+      "ERROR",
+      "INFRA_ERROR",
+      "CONFIG_ERROR"
+    ],
+    "semantics": {
+      "PASS": "Le diagnostic a été exécuté et la condition attendue est satisfaite.",
+      "WARN": "Anomalie ou risque non bloquant.",
+      "FAIL": "La cible a été testée et la condition attendue n'est pas satisfaite.",
+      "SKIP": "Exécution omise volontairement avec raison explicite.",
+      "BLOCKED": "Le diagnostic attendu ne peut pas être exécuté à cause d'un prérequis.",
+      "PARTIAL": "Une partie seulement du diagnostic est exploitable.",
+      "ERROR": "Erreur interne du niveau ou du code LevelUpDiag.",
+      "INFRA_ERROR": "Problème d'environnement ou d'exécution externe.",
+      "CONFIG_ERROR": "Configuration, manifeste ou sélection invalide."
+    },
+    "campaign_aggregation": {
+      "required_FAIL": "FAIL",
+      "required_CONFIG_ERROR": "FAIL",
+      "required_BLOCKED": "BLOCKED",
+      "required_INFRA_ERROR": "BLOCKED",
+      "required_PARTIAL": "BLOCKED",
+      "required_SKIP": "BLOCKED unless explicitly non-applicable",
+      "WARN": "WARN unless a FAIL/BLOCKED has higher precedence",
+      "all_required_PASS": "PASS"
+    },
+    "precedence_high_to_low": [
+      "FAIL",
+      "CONFIG_ERROR",
+      "BLOCKED",
+      "INFRA_ERROR",
+      "PARTIAL",
+      "WARN",
+      "PASS"
+    ]
+  },
+  "final_level_taxonomy": [
+    {
+      "id": "N00",
+      "slug": "control-panel",
+      "name": "Control Panel",
+      "file": "levels/N00_control_panel.pyw",
+      "launcher": "launchers/N00-control-panel.bat",
+      "required": false,
+      "depends_on": [],
+      "role": "Self-check léger et point d'entrée visuel; ne valide pas kOA-Linux."
+    },
+    {
+      "id": "N01",
+      "slug": "environment",
+      "name": "Environment",
+      "file": "levels/N01_environment.pyw",
+      "launcher": "launchers/N01-environment.bat",
+      "required": true,
+      "depends_on": [],
+      "role": "Vérifie Python, racine cible, outils requis et chemins configurés."
+    },
+    {
+      "id": "N02",
+      "slug": "repository",
+      "name": "Repository",
+      "file": "levels/N02_repository.pyw",
+      "launcher": "launchers/N02-repository.bat",
+      "required": true,
+      "depends_on": [
+        "N01"
+      ],
+      "role": "Observe l'identité du checkout cible, la présence des chemins fondamentaux et l'état Git si disponible."
+    },
+    {
+      "id": "N03",
+      "slug": "documentation",
+      "name": "Documentation",
+      "file": "levels/N03_documentation.pyw",
+      "launcher": "launchers/N03-documentation.bat",
+      "required": true,
+      "depends_on": [
+        "N01",
+        "N02"
+      ],
+      "role": "Lance le validateur documentaire public configuré."
+    },
+    {
+      "id": "N04",
+      "slug": "contracts",
+      "name": "Contracts",
+      "file": "levels/N04_contracts.pyw",
+      "launcher": "launchers/N04-contracts.bat",
+      "required": true,
+      "depends_on": [
+        "N01",
+        "N02"
+      ],
+      "role": "Lance le runner public des contrats."
+    },
+    {
+      "id": "N05",
+      "slug": "components",
+      "name": "Components",
+      "file": "levels/N05_components.pyw",
+      "launcher": "launchers/N05-components.bat",
+      "required": true,
+      "depends_on": [
+        "N01",
+        "N02",
+        "N04"
+      ],
+      "role": "Lance le runner public des composants."
+    },
+    {
+      "id": "N06",
+      "slug": "integrations",
+      "name": "Integrations",
+      "file": "levels/N06_integrations.pyw",
+      "launcher": "launchers/N06-integrations.bat",
+      "required": false,
+      "depends_on": [
+        "N01",
+        "N02",
+        "N04"
+      ],
+      "role": "Lance les validations d'intégrations disponibles/configurées sans inventer un runner absent."
+    },
+    {
+      "id": "N07",
+      "slug": "profiles",
+      "name": "Profiles",
+      "file": "levels/N07_profiles.pyw",
+      "launcher": "launchers/N07-profiles.bat",
+      "required": false,
+      "depends_on": [
+        "N01",
+        "N02",
+        "N04"
+      ],
+      "role": "Lance les validations de profils disponibles/configurées."
+    },
+    {
+      "id": "N08",
+      "slug": "security",
+      "name": "Security",
+      "file": "levels/N08_security.pyw",
+      "launcher": "launchers/N08-security.bat",
+      "required": false,
+      "depends_on": [
+        "N01",
+        "N02",
+        "N04",
+        "N05"
+      ],
+      "role": "Lance le runner public de sécurité lorsqu'il existe."
+    },
+    {
+      "id": "N09",
+      "slug": "offline",
+      "name": "Offline",
+      "file": "levels/N09_offline.pyw",
+      "launcher": "launchers/N09-offline.bat",
+      "required": false,
+      "depends_on": [
+        "N01",
+        "N02",
+        "N04",
+        "N05"
+      ],
+      "role": "Lance le runner public offline dans un environnement approprié."
+    },
+    {
+      "id": "N10",
+      "slug": "system",
+      "name": "System",
+      "file": "levels/N10_system.pyw",
+      "launcher": "launchers/N10-system.bat",
+      "required": false,
+      "depends_on": [
+        "N01",
+        "N02",
+        "N04",
+        "N05"
+      ],
+      "role": "Lance les tests système publics lorsqu'ils sont disponibles et applicables."
+    },
+    {
+      "id": "N11",
+      "slug": "delivery",
+      "name": "Delivery Appendix Absence",
+      "file": "levels/N11_delivery.pyw",
+      "launcher": "launchers/N11-delivery.bat",
+      "required": false,
+      "depends_on": [
+        "N01"
+      ],
+      "role": "Inspecte un staging ou artefact fourni et vérifie l'absence de LevelUpDiag-Koali."
+    }
+  ],
+  "manifest_contract": {
+    "path": "levelupdiag_manifest.json",
+    "schema_id": "levelupdiag.koali.manifest.v1",
+    "root_fields": {
+      "schema": "required string",
+      "standard": "required constant LevelUpDiag-Koali",
+      "standard_version": "required string",
+      "levels": "required array"
+    },
+    "level_fields": {
+      "id": "required string matching ^N[0-9]{2}$",
+      "name": "required non-empty string",
+      "file": "required relative path",
+      "enabled": "required boolean",
+      "required": "required boolean",
+      "depends_on": "required array of level ids",
+      "timeout_seconds": "required integer >= 1",
+      "description": "optional string",
+      "command_key": "optional string referencing config.commands"
+    },
+    "frozen_rules": [
+      "ids uniques",
+      "files relatifs au dépôt appendice",
+      "depends_on ne référence que des ids existants",
+      "aucune auto-découverte implicite des levels",
+      "l'ordre d'affichage suit l'id",
+      "l'ordre d'exécution respecte depends_on",
+      "un level enabled=false n'est pas exécuté",
+      "un level required=true sans résultat final empêche un PASS de campagne"
+    ]
+  },
+  "config_contract": {
+    "example_path": "levelupdiag.config.example.json",
+    "local_path": "levelupdiag.config.local.json",
+    "schema_id": "levelupdiag.koali.config.v1",
+    "required_fields": {
+      "schema": "string",
+      "app_name": "string",
+      "target_repo_root": "string path",
+      "control_dir": "string path",
+      "artifacts_dir": "string path",
+      "toolchain": "object",
+      "commands": "object",
+      "env": "object"
+    },
+    "recommended_defaults": {
+      "app_name": "kOA-Linux",
+      "control_dir": ".levelupdiag",
+      "artifacts_dir": ".levelupdiag/diagnostics",
+      "toolchain": {
+        "required": [
+          "python"
+        ],
+        "optional": [
+          "git",
+          "cargo"
+        ]
+      },
+      "commands": {
+        "docs": "python docs/tools/validate_docs.py",
+        "contracts": "python ci/scripts/run-contracts.py",
+        "components": "python ci/scripts/run-components.py",
+        "integrations": "",
+        "profiles": "",
+        "security": "python ci/scripts/run-security.py",
+        "offline": "python ci/scripts/run-offline.py",
+        "system": "python ci/scripts/run-system-tests.py"
+      },
+      "env": {}
+    },
+    "rules": [
+      "example_path est sûr à versionner et ne contient aucun secret",
+      "local_path contient les chemins machine et n'est pas versionné",
+      "commande vide = capability non configurée; ne pas inventer une commande",
+      "target_repo_root doit exister pour les levels N02-N10",
+      "control_dir et artifacts_dir sont les seules racines d'écriture LevelUpDiag par défaut"
+    ]
+  },
+  "result_contract": {
+    "schema_path": "schemas/levelupdiag.result.schema.json",
+    "schema_id": "levelupdiag.report.v1",
+    "required_fields": [
+      "schema",
+      "standard",
+      "standard_version",
+      "level",
+      "name",
+      "verdict",
+      "findings"
+    ],
+    "optional_fields": [
+      "artifacts",
+      "started_at",
+      "ended_at",
+      "duration_seconds",
+      "exit_code",
+      "command",
+      "cwd",
+      "output_tail"
+    ],
+    "finding_shape": {
+      "severity": "one of allowed verdicts or INFO",
+      "code": "stable uppercase identifier",
+      "message": "human readable string",
+      "path": "optional relevant path",
+      "detail": "optional string"
+    },
+    "artifact_shape": {
+      "kind": "log|report|text|screenshot|other",
+      "path": "relative path under configured artifacts root",
+      "label": "optional string"
+    },
+    "rules": [
+      "result.json est la conclusion canonique d'un Run",
+      "output.log contient le détail d'exécution",
+      "output_tail est borné et destiné à l'UI",
+      "timestamps sont ISO-8601"
+    ]
+  },
+  "campaign_contract": {
+    "purpose": "Regrouper simplement plusieurs runs; pas de moteur de policy.",
+    "fields": {
+      "campaign_id": "required unique per execution",
+      "name": "required string",
+      "target_repo_root": "required string",
+      "selected_levels": "required ordered array",
+      "started_at": "required ISO-8601 string",
+      "ended_at": "optional ISO-8601 string",
+      "status": "one of verdicts",
+      "results": "map level id -> result path or compact result",
+      "counts": "map verdict -> integer"
+    },
+    "built_in_names": [
+      "developer-fast",
+      "bundle-validation",
+      "merge-validation",
+      "nightly",
+      "release-preparation",
+      "delivery-check"
+    ],
+    "rules": [
+      "une campaign ne change pas la sémantique d'un level",
+      "la liste des levels sélectionnés est enregistrée avant l'exécution",
+      "un level requis sélectionné sans résultat final bloque le PASS global"
+    ]
+  },
+  "runtime_layout": {
+    "root": ".levelupdiag",
+    "paths": [
+      ".levelupdiag/diagnostics/<level>/<run>/result.json",
+      ".levelupdiag/diagnostics/<level>/<run>/output.log",
+      ".levelupdiag/runs/<campaign_id>/summary.json",
+      ".levelupdiag/runs/<campaign_id>/summary.txt",
+      ".levelupdiag/latest/<level>/result.json"
+    ],
+    "rules": [
+      "runtime root est ignoré par Git",
+      "un nouveau run n'écrase pas l'historique",
+      "latest peut être recopié ou remplacé atomiquement",
+      "aucune donnée runtime n'est requise pour démarrer le dépôt"
+    ]
+  },
+  "final_repository_layout": {
+    "root_files": [
+      ".gitignore",
+      "README.md",
+      "CHANGELOG.md",
+      "CONTRIBUTING.md",
+      "SECURITY.md",
+      "pyproject.toml",
+      "levelupdiag.config.example.json",
+      "levelupdiag_manifest.json",
+      "levelupdiag_wrapper.pyw",
+      "levelupdiag_wrapper_common.py",
+      "START_LEVELUPDIAG.bat"
+    ],
+    "core_files": [
+      "levelupdiag_core/__init__.py",
+      "levelupdiag_core/config.py",
+      "levelupdiag_core/manifest.py",
+      "levelupdiag_core/models.py",
+      "levelupdiag_core/planner.py",
+      "levelupdiag_core/commands.py",
+      "levelupdiag_core/runner.py",
+      "levelupdiag_core/verdicts.py",
+      "levelupdiag_core/reports.py",
+      "levelupdiag_core/logs.py",
+      "levelupdiag_core/artifacts.py"
+    ],
+    "script_files": [
+      "scripts/print_manifest.py",
+      "scripts/run_level.py",
+      "scripts/verify_repo.py"
+    ],
+    "schema_files": [
+      "schemas/levelupdiag.result.schema.json"
+    ],
+    "level_files": [
+      "levels/N00_control_panel.pyw",
+      "levels/N01_environment.pyw",
+      "levels/N02_repository.pyw",
+      "levels/N03_documentation.pyw",
+      "levels/N04_contracts.pyw",
+      "levels/N05_components.pyw",
+      "levels/N06_integrations.pyw",
+      "levels/N07_profiles.pyw",
+      "levels/N08_security.pyw",
+      "levels/N09_offline.pyw",
+      "levels/N10_system.pyw",
+      "levels/N11_delivery.pyw"
+    ],
+    "launcher_files": [
+      "launchers/N00-control-panel.bat",
+      "launchers/N01-environment.bat",
+      "launchers/N02-repository.bat",
+      "launchers/N03-documentation.bat",
+      "launchers/N04-contracts.bat",
+      "launchers/N05-components.bat",
+      "launchers/N06-integrations.bat",
+      "launchers/N07-profiles.bat",
+      "launchers/N08-security.bat",
+      "launchers/N09-offline.bat",
+      "launchers/N10-system.bat",
+      "launchers/N11-delivery.bat",
+      "launchers/run_level.bat"
+    ],
+    "test_files": [
+      "tests/test_config.py",
+      "tests/test_manifest.py",
+      "tests/test_planner.py",
+      "tests/test_commands.py",
+      "tests/test_runner.py",
+      "tests/test_reports.py",
+      "tests/test_logs.py",
+      "tests/test_delivery_level.py"
+    ],
+    "documentation": "Conserver les Markdown déjà produits sous docs/; ce contrat s'y ajoute."
+  },
+  "module_api_contract": {
+    "levelupdiag_core/config.py": {
+      "owns": "configuration locale et résolution des chemins",
+      "public": [
+        "class AppConfig",
+        "detect_diag_root(start: str | Path | None = None) -> Path",
+        "load_config(root: str | Path | None = None, config_path: str | Path | None = None) -> AppConfig",
+        "save_config(config: AppConfig, path: str | Path) -> None"
+      ],
+      "must_not": [
+        "charger le manifeste",
+        "lancer des levels",
+        "contenir une logique kOA spécifique"
+      ]
+    },
+    "levelupdiag_core/manifest.py": {
+      "owns": "chargement, normalisation et validation structurelle du manifeste",
+      "public": [
+        "class LevelInfo",
+        "load_manifest(root: str | Path | None = None) -> dict",
+        "list_levels(root: str | Path | None = None) -> list[LevelInfo]",
+        "get_level(level_id: str, root: str | Path | None = None) -> LevelInfo",
+        "normalize_level_id(value: str | int) -> str",
+        "validate_manifest(root: str | Path | None = None) -> list[str]"
+      ],
+      "must_not": [
+        "exécuter des processus",
+        "écrire des résultats"
+      ]
+    },
+    "levelupdiag_core/models.py": {
+      "owns": "dataclasses simples partagées",
+      "public_types": {
+        "Finding": [
+          "severity",
+          "code",
+          "message",
+          "path",
+          "detail"
+        ],
+        "Artifact": [
+          "kind",
+          "path",
+          "label"
+        ],
+        "StepResult": [
+          "name",
+          "command",
+          "cwd",
+          "status",
+          "exit_code",
+          "started_at",
+          "ended_at",
+          "duration_seconds",
+          "output_tail"
+        ],
+        "LevelResult": [
+          "level",
+          "name",
+          "verdict",
+          "findings",
+          "artifacts",
+          "started_at",
+          "ended_at",
+          "duration_seconds",
+          "exit_code",
+          "command",
+          "cwd",
+          "output_tail"
+        ],
+        "CampaignResult": [
+          "campaign_id",
+          "name",
+          "target_repo_root",
+          "selected_levels",
+          "started_at",
+          "ended_at",
+          "status",
+          "counts",
+          "results"
+        ]
+      },
+      "must_not": [
+        "I/O",
+        "subprocess",
+        "Tkinter"
+      ]
+    },
+    "levelupdiag_core/planner.py": {
+      "owns": "ordre, sélection et dépendances",
+      "public": [
+        "build_plan(levels: list[LevelInfo], selected: list[str] | None = None) -> list[LevelInfo]",
+        "dependency_blockers(level: LevelInfo, completed: dict[str, LevelResult]) -> list[str]"
+      ],
+      "rules": [
+        "plan déterministe",
+        "détection de cycle",
+        "aucun scheduler distribué",
+        "séquentiel par défaut"
+      ]
+    },
+    "levelupdiag_core/commands.py": {
+      "owns": "exécution de processus externes",
+      "public": [
+        "find_executable(name: str) -> str | None",
+        "format_command(command: str | Sequence[str]) -> str",
+        "run_cmd(command: Sequence[str], *, cwd: str | Path | None = None, timeout: int | float = 120, name: str | None = None, env: Mapping[str, str] | None = None, tail_chars: int = 8000) -> StepResult",
+        "launch_console(command: Sequence[str], cwd: str | Path, title: str = 'LevelUpDiag-Koali') -> subprocess.Popen"
+      ],
+      "rules": [
+        "run_cmd reçoit une séquence d'arguments",
+        "shell=False",
+        "stdout et stderr sont capturés ensemble ou séparément de façon documentée",
+        "timeout retourne INFRA_ERROR dans StepResult",
+        "exception de lancement retourne INFRA_ERROR",
+        "ne pas imprimer les variables d'environnement"
+      ]
+    },
+    "levelupdiag_core/runner.py": {
+      "owns": "orchestration des levels et campagnes",
+      "public": [
+        "run_level(level: LevelInfo, config: AppConfig, *, wait: bool = True) -> LevelResult",
+        "run_levels(level_ids: list[str] | None, config: AppConfig) -> CampaignResult",
+        "run_campaign(name: str, level_ids: list[str], config: AppConfig) -> CampaignResult"
+      ],
+      "rules": [
+        "utiliser planner.py",
+        "utiliser reports.py/logs.py pour persistance",
+        "ne pas embarquer de logique spécifique à un level",
+        "un fichier level absent produit CONFIG_ERROR",
+        "une dépendance bloquée produit BLOCKED"
+      ]
+    },
+    "levelupdiag_core/verdicts.py": {
+      "owns": "constantes et helpers de verdict",
+      "public": [
+        "PASS",
+        "WARN",
+        "FAIL",
+        "SKIP",
+        "BLOCKED",
+        "PARTIAL",
+        "ERROR",
+        "INFRA_ERROR",
+        "CONFIG_ERROR",
+        "normalize_verdict(value: str) -> str",
+        "aggregate_verdicts(verdicts: list[str]) -> str"
+      ],
+      "must_not": [
+        "I/O",
+        "connaître les ids de levels"
+      ]
+    },
+    "levelupdiag_core/reports.py": {
+      "owns": "sérialisation et lecture des résultats",
+      "public": [
+        "write_level_result(result: LevelResult, path: str | Path) -> Path",
+        "read_level_result(path: str | Path) -> LevelResult",
+        "write_campaign_summary(result: CampaignResult, directory: str | Path) -> tuple[Path, Path]"
+      ],
+      "rules": [
+        "JSON UTF-8 indenté",
+        "texte lisible pour summary.txt",
+        "écriture via fichier temporaire puis remplacement"
+      ]
+    },
+    "levelupdiag_core/logs.py": {
+      "owns": "chemins et écriture des logs",
+      "public": [
+        "run_directory(config: AppConfig, level: LevelInfo, started_at: datetime) -> Path",
+        "write_output_log(directory: str | Path, text: str) -> Path",
+        "update_latest(config: AppConfig, level: LevelInfo, result_path: str | Path) -> Path"
+      ],
+      "rules": [
+        "écriture seulement sous control_dir/artifacts_dir",
+        "UTF-8",
+        "pas d'upload",
+        "pas de rotation complexe"
+      ]
+    },
+    "levelupdiag_core/artifacts.py": {
+      "owns": "helpers de noms et ouverture de chemins",
+      "public": [
+        "safe_slug(value: str) -> str",
+        "level_artifacts_dir(root: str | Path, level_id: str, level_name: str) -> Path",
+        "open_path(path: str | Path) -> None"
+      ],
+      "rules": [
+        "aucune exécution du contenu des artefacts"
+      ]
+    }
+  },
+  "level_implementation_contract": {
+    "common_pattern": [
+      "Chaque level est un fichier mince.",
+      "Chaque level charge AppConfig via load_config().",
+      "Chaque level construit des Findings/Artifacts simples.",
+      "Chaque level utilise run_cmd() pour les commandes externes.",
+      "Chaque level écrit exactement un LevelResult final.",
+      "Chaque level peut être lancé seul.",
+      "La logique de GUI locale à un level reste facultative et ne change pas le verdict.",
+      "Un level n'appelle jamais directement un autre fichier level."
+    ],
+    "command_mapping": {
+      "N03": "commands.docs",
+      "N04": "commands.contracts",
+      "N05": "commands.components",
+      "N06": "commands.integrations",
+      "N07": "commands.profiles",
+      "N08": "commands.security",
+      "N09": "commands.offline",
+      "N10": "commands.system"
+    },
+    "empty_command_behavior": {
+      "required_level": "CONFIG_ERROR if command is contractually required for that deployment; otherwise BLOCKED",
+      "optional_level": "SKIP or BLOCKED with explicit finding; never invent a command"
+    }
+  },
+  "wrapper_contract": {
+    "files": [
+      "levelupdiag_wrapper.pyw",
+      "levelupdiag_wrapper_common.py"
+    ],
+    "features": [
+      "afficher les levels dans l'ordre",
+      "afficher enabled/required",
+      "lancer un level",
+      "lancer tous les levels activés",
+      "afficher le dernier verdict",
+      "ouvrir le dossier de logs",
+      "recharger config et manifeste"
+    ],
+    "must_not": [
+      "avoir sa propre logique d'agrégation",
+      "modifier silencieusement config/manifeste",
+      "faire des checks réseau implicites",
+      "lancer kOA-Linux comme service",
+      "être requis pour la CLI"
+    ]
+  },
+  "cli_contract": {
+    "script": "scripts/run_level.py",
+    "preserve_compatibility": [
+      "--list",
+      "<Nxx|number>",
+      "--wait",
+      "--windowed",
+      "--console"
+    ],
+    "allowed_extensions": [
+      "--all",
+      "--campaign <name>",
+      "--from <Nxx>",
+      "--to <Nxx>"
+    ],
+    "not_required": [
+      "subcommand framework",
+      "plugin CLI",
+      "remote API"
+    ]
+  },
+  "koa_integration_contract": {
+    "target_root": "config.target_repo_root",
+    "access_default": "read_only",
+    "allowed_interaction": [
+      "process execution with cwd=target_repo_root",
+      "read files needed for diagnostics",
+      "read Git revision/status if git is available",
+      "inspect provided delivery artifacts"
+    ],
+    "forbidden_interaction": [
+      "import internal koa Python modules to bypass public runners",
+      "edit koa source or manifests",
+      "git add/commit/push",
+      "cleanup or reset the target worktree",
+      "create files in target except outputs explicitly produced by the public koa command itself"
+    ],
+    "missing_public_command": "BLOCKED or CONFIG_ERROR; do not synthesize a replacement implementation"
+  },
+  "delivery_exclusion_contract": {
+    "level": "N11",
+    "goal": "Vérifier l'absence de l'appendice dans le staging ou artefact de livraison fourni.",
+    "minimum_patterns": [
+      "LevelUpDiag-Koali",
+      "levelupdiag_core",
+      ".levelupdiag",
+      "levelupdiag_manifest.json",
+      "levelupdiag.config.example.json",
+      "levelupdiag.config.local.json",
+      "levelupdiag_wrapper.pyw",
+      "levelupdiag_wrapper_common.py",
+      "START_LEVELUPDIAG.bat"
+    ],
+    "behavior": {
+      "residue_found": "FAIL",
+      "target_missing": "CONFIG_ERROR",
+      "artifact_unreadable": "BLOCKED or INFRA_ERROR",
+      "clean": "PASS"
+    },
+    "rules": [
+      "inspection seulement; ne pas supprimer automatiquement le résidu",
+      "les logs de LevelUpDiag restent hors du livrable",
+      "ne pas exécuter le contenu d'une archive inspectée"
+    ]
+  },
+  "migration_from_current_snapshot": {
+    "keep_and_modify": [
+      ".gitignore",
+      "README.md",
+      "levelupdiag.config.example.json",
+      "levelupdiag_manifest.json",
+      "levelupdiag_wrapper.pyw",
+      "levelupdiag_wrapper_common.py",
+      "START_LEVELUPDIAG.bat",
+      "levelupdiag_core/__init__.py",
+      "levelupdiag_core/artifacts.py",
+      "levelupdiag_core/commands.py",
+      "levelupdiag_core/config.py",
+      "levelupdiag_core/manifest.py",
+      "levelupdiag_core/reports.py",
+      "levelupdiag_core/verdicts.py",
+      "scripts/print_manifest.py",
+      "scripts/run_level.py",
+      "scripts/verify_repo.py",
+      "schemas/levelupdiag.result.schema.json"
+    ],
+    "rename": {
+      "levelupdiag_core/level_runner.py": "levelupdiag_core/runner.py"
+    },
+    "remove": [
+      ".smartignore",
+      "GitSink.bat",
+      "levelupdiag_core/http.py",
+      "launchers/N02-services.bat",
+      "launchers/N03-static-integrity.bat",
+      "launchers/N04-api-contract.bat",
+      "launchers/N05-data-mock-states.bat",
+      "launchers/N06-runtime-smoke.bat",
+      "launchers/N07-routing.bat",
+      "launchers/N08-critical-ux-flows.bat",
+      "launchers/N09-error-resilience.bat",
+      "launchers/N10-accessibility.bat",
+      "launchers/N11-visual-regression.bat",
+      "launchers/N12-performance-reliability.bat",
+      "launchers/N13-security.bat",
+      "launchers/N14-release-gate.bat",
+      "launchers/N15-real-world-sandbox.bat"
+    ],
+    "create": [
+      "pyproject.toml",
+      "levelupdiag_core/models.py",
+      "levelupdiag_core/planner.py",
+      "levelupdiag_core/logs.py",
+      "levels/N00_control_panel.pyw",
+      "levels/N01_environment.pyw",
+      "levels/N02_repository.pyw",
+      "levels/N03_documentation.pyw",
+      "levels/N04_contracts.pyw",
+      "levels/N05_components.pyw",
+      "levels/N06_integrations.pyw",
+      "levels/N07_profiles.pyw",
+      "levels/N08_security.pyw",
+      "levels/N09_offline.pyw",
+      "levels/N10_system.pyw",
+      "levels/N11_delivery.pyw",
+      "launchers/N02-repository.bat",
+      "launchers/N03-documentation.bat",
+      "launchers/N04-contracts.bat",
+      "launchers/N05-components.bat",
+      "launchers/N06-integrations.bat",
+      "launchers/N07-profiles.bat",
+      "launchers/N08-security.bat",
+      "launchers/N09-offline.bat",
+      "launchers/N10-system.bat",
+      "launchers/N11-delivery.bat",
+      "tests/test_config.py",
+      "tests/test_manifest.py",
+      "tests/test_planner.py",
+      "tests/test_commands.py",
+      "tests/test_runner.py",
+      "tests/test_reports.py",
+      "tests/test_logs.py",
+      "tests/test_delivery_level.py"
+    ],
+    "preserve_existing_launcher_if_same_role": [
+      "launchers/N00-control-panel.bat",
+      "launchers/N01-environment.bat",
+      "launchers/run_level.bat"
+    ]
+  },
+  "pyproject_contract": {
+    "build_system": "setuptools or hatchling; choose one simple standard backend and do not add runtime framework dependencies",
+    "project_name": "levelupdiag-koali",
+    "requires_python": ">=3.11",
+    "runtime_dependencies": [],
+    "optional_dev_dependencies": [
+      "pytest"
+    ],
+    "entry_points": "not required; scripts/*.py remain supported",
+    "gui_entry_point": "not required; .pyw wrapper remains supported"
+  },
+  "testing_contract": {
+    "required_test_domains": [
+      "config parsing and path resolution",
+      "manifest parsing and normalization",
+      "duplicate ids and missing dependencies",
+      "cycle detection",
+      "deterministic plan order",
+      "command PASS/FAIL",
+      "missing executable",
+      "timeout",
+      "runner missing level file",
+      "dependency BLOCKED propagation",
+      "result JSON serialization",
+      "log path separation between runs",
+      "latest update",
+      "N11 residue detection and clean case"
+    ],
+    "test_style": [
+      "pytest allowed as dev-only dependency",
+      "tests must not require a real kOA-Linux checkout unless marked integration",
+      "use tmp_path and fake scripts for subprocess tests",
+      "no network required for unit tests"
+    ]
+  },
+  "verification_before_code_is_considered_complete": [
+    "python scripts/verify_repo.py succeeds",
+    "python scripts/run_level.py --list succeeds",
+    "all manifest level files exist",
+    "all manifest dependencies resolve",
+    "core Python files compile",
+    "pytest tests pass",
+    "a synthetic PASS campaign produces summary.json and summary.txt",
+    "a synthetic missing-tool case produces BLOCKED or INFRA_ERROR, never PASS",
+    "a synthetic failing command produces FAIL",
+    "N11 detects an injected LevelUpDiag residue",
+    "N11 passes on a clean synthetic delivery tree",
+    "GUI imports and opens without executing a campaign automatically"
+  ],
+  "change_budget": {
+    "default_allowed": [
+      "bug fixes",
+      "test additions",
+      "small helper functions",
+      "additional findings",
+      "new optional config command keys",
+      "documentation corrections"
+    ],
+    "requires_explicit_user_instruction": [
+      "new primary domain entity",
+      "new verdict value",
+      "new level outside N00-N11",
+      "new runtime dependency",
+      "renaming a frozen file path",
+      "new persistent runtime root",
+      "network service",
+      "database",
+      "integration into koa-linux repository",
+      "change to delivery-exclusion principle",
+      "change from sequential-default execution model"
+    ]
+  },
+  "ai_behavior_when_uncertain": [
+    "Prefer the simplest implementation consistent with this contract.",
+    "Do not invent missing kOA commands; leave the command key empty and return a non-success explanatory result.",
+    "Do not add a new layer merely to make the design more generic.",
+    "When code and docs disagree, preserve the contract and update code toward it unless the user explicitly says otherwise.",
+    "When a change would alter a frozen decision, stop that change and surface the conflict in the implementation notes.",
+    "Do not create TODO placeholders for required final files unless the user asked for a scaffold-only pass."
+  ],
+  "completion_definition": {
+    "code_complete_when": [
+      "final_repository_layout exists for code-relevant paths",
+      "manifest exactly references the intended N00-N11 levels",
+      "core APIs satisfy module_api_contract",
+      "verdict semantics are consistent across CLI, GUI, levels and reports",
+      "logs are centralized under .levelupdiag",
+      "kOA access remains external and read-only by default",
+      "delivery exclusion check is implemented",
+      "tests in testing_contract pass"
+    ],
+    "not_required_for_completion": [
+      "remote reporting",
+      "web dashboard",
+      "database",
+      "distributed execution",
+      "plugin ecosystem"
+    ]
+  }
+}

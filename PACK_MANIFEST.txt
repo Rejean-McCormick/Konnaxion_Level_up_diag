@@ -1,0 +1,14 @@
+Konnaxion LevelUpDiag Mega Diagnostic Pack v1.0.0
+
+Purpose: overlay/customization pack for the existing LevelUpDiag frame.
+Core LevelUpDiag modifications: none required.
+Manifest taxonomy: exact N00..N11.
+Remote diagnostics: disabled by default.
+Destructive operations: none.
+Primary campaign for current connection debugging: connection-debug.
+
+Validation performed before packaging:
+- Python compileall: PASS
+- LevelUpDiag scripts/verify_repo.py after overlay: PASS
+- Full resulting pytest suite: 68 passed
+- Snapshot smoke: N00/N01/N08/N11 executed against supplied Konnaxion and Capsule Manager snapshots

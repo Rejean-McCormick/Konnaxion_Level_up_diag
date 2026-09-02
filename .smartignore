@@ -1,0 +1,10 @@
+.levelupdiag/**
+**/node_modules/**
+**/__pycache__/**
+**/.pytest_cache/**
+**/.ruff_cache/**
+**/screenshots_*/**
+**/traces_*/**
+**/baseline/**
+**/current_*/**
+**/diff_*/**

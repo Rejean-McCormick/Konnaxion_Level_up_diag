@@ -1,0 +1,23 @@
+{
+  "schema": "levelupdiag.koali.manifest.v1",
+  "suite_name": "Konnaxion LevelUpDiag Mega Diagnostics",
+  "version": "1.0.0",
+  "repository_mode": "standalone-diagnostics-suite",
+  "config_file": "levelupdiag.config.local.json",
+  "config_example_file": "levelupdiag.config.example.json",
+  "control_dir_default": ".levelupdiag",
+  "levels": [
+    {"id":"N00","name":"Control & Discovery","file":"levels/N00_n00_konnaxion.pyw","enabled":true,"required":true,"depends_on":[],"timeout_seconds":120,"purpose":"Start a diagnostic session, discover Konnaxion surfaces, paths and toolchain."},
+    {"id":"N01","name":"Repository & Static","file":"levels/N01_n01_konnaxion.pyw","enabled":true,"required":true,"depends_on":["N00"],"timeout_seconds":180,"purpose":"Validate repository shape and static checkout state."},
+    {"id":"N02","name":"Backend / Django / DB","file":"levels/N02_n02_konnaxion.pyw","enabled":true,"required":true,"depends_on":["N00"],"timeout_seconds":1200,"purpose":"Run Django system, migration and backend smoke diagnostics."},
+    {"id":"N03","name":"Frontend / Next","file":"levels/N03_n03_konnaxion.pyw","enabled":true,"required":true,"depends_on":["N00"],"timeout_seconds":2400,"purpose":"Run TypeScript, ESLint, Jest and Next production-build diagnostics."},
+    {"id":"N04","name":"API Contracts","file":"levels/N04_n04_konnaxion.pyw","enabled":true,"required":true,"depends_on":["N00"],"timeout_seconds":900,"purpose":"Check frontend/backend endpoint and OpenAPI contract surfaces."},
+    {"id":"N05","name":"Runtime & Browser","file":"levels/N05_n05_konnaxion.pyw","enabled":true,"required":true,"depends_on":["N00"],"timeout_seconds":1500,"purpose":"Probe local HTTP surfaces and Playwright smoke flows."},
+    {"id":"N06","name":"Jobs / Redis / Celery","file":"levels/N06_n06_konnaxion.pyw","enabled":true,"required":true,"depends_on":["N00"],"timeout_seconds":900,"purpose":"Validate background-task tests and optional live job probes."},
+    {"id":"N07","name":"Security & Auth","file":"levels/N07_n07_konnaxion.pyw","enabled":true,"required":true,"depends_on":["N00"],"timeout_seconds":900,"purpose":"Run Django deploy checks and Capsule Manager security-gate tests."},
+    {"id":"N08","name":"Capsule Local","file":"levels/N08_n08_konnaxion.pyw","enabled":true,"required":true,"depends_on":["N00"],"timeout_seconds":900,"purpose":"Inspect Capsule Manager, capsule integrity and local runtime support."},
+    {"id":"N09","name":"Deployed Runtime","file":"levels/N09_n09_konnaxion.pyw","enabled":true,"required":true,"depends_on":["N00"],"timeout_seconds":2400,"purpose":"Run safe deployed DNS/HTTP diagnostics and optional deep read-only probes."},
+    {"id":"N10","name":"Deep Scan","file":"levels/N10_n10_konnaxion.pyw","enabled":true,"required":true,"depends_on":["N00"],"timeout_seconds":3600,"purpose":"Run existing Konnaxion full-scan and full backend test suite."},
+    {"id":"N11","name":"Correlation & Triage","file":"levels/N11_n11_konnaxion.pyw","enabled":true,"required":true,"depends_on":["N00"],"timeout_seconds":180,"purpose":"Correlate current-session evidence and identify the likely failing domain."}
+  ]
+}
