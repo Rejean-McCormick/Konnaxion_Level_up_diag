@@ -1,14 +1,12 @@
-Konnaxion LevelUpDiag Mega Diagnostic Pack v1.0.0
+Konnaxion LevelUpDiag Upgraded v3.0.0
 
-Purpose: overlay/customization pack for the existing LevelUpDiag frame.
-Core LevelUpDiag modifications: none required.
-Manifest taxonomy: exact N00..N11.
+Purpose: evolved LevelUpDiag engine + preserved Konnaxion diagnostic specialization.
+Taxonomy: exact N00..N11.
+Primary campaign: connection-debug.
+Primary ordered levels: N00 -> N01 -> N02 -> N03 -> N04 -> N05 -> N06 -> N11.
+Recommended escalation: source-audit -> auth-debug -> connection-debug -> full-local.
+Campaign execution: sequential.
+Runtime evidence retention: current_only; legacy logs/runs are not retained.
 Remote diagnostics: disabled by default.
-Destructive operations: none.
-Primary campaign for current connection debugging: connection-debug.
-
-Validation performed before packaging:
-- Python compileall: PASS
-- LevelUpDiag scripts/verify_repo.py after overlay: PASS
-- Full resulting pytest suite: 68 passed
-- Snapshot smoke: N00/N01/N08/N11 executed against supplied Konnaxion and Capsule Manager snapshots
+Destructive deployment/restart/restore operations: none.
+N11 correlation: campaign-aware; correlates only expected current-session levels.

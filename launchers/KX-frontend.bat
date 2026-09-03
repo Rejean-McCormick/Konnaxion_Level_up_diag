@@ -1,4 +1,5 @@
 @echo off
 setlocal
 cd /d "%~dp0.."
-python scripts\run_konnaxion.py frontend
+python levelupdiag.py run frontend
+exit /b %ERRORLEVEL%

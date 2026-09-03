@@ -1,3 +1,5 @@
 @echo off
-python "%~dp0..\scripts\run_konnaxion.py" auth-debug
+setlocal
+cd /d "%~dp0.."
+python levelupdiag.py run auth-debug
 exit /b %ERRORLEVEL%

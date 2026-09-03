@@ -1,4 +1,5 @@
 @echo off
 setlocal
 cd /d "%~dp0.."
-python scripts\run_konnaxion.py local-runtime
+python levelupdiag.py run local-runtime
+exit /b %ERRORLEVEL%

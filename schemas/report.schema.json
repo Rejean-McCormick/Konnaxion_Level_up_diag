@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "levelupdiag.report.v2",
+  "type": "object",
+  "required": [
+    "schema",
+    "level_id",
+    "verdict",
+    "findings"
+  ],
+  "properties": {
+    "schema": {
+      "const": "levelupdiag.report.v2"
+    },
+    "verdict": {
+      "enum": [
+        "PASS",
+        "WARN",
+        "FAIL",
+        "SKIP",
+        "BLOCKED",
+        "PARTIAL",
+        "ERROR",
+        "INFRA_ERROR",
+        "CONFIG_ERROR"
+      ]
+    },
+    "findings": {
+      "type": "array"
+    }
+  },
+  "additionalProperties": true
+}

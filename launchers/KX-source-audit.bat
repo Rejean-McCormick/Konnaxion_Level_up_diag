@@ -1,3 +1,5 @@
 @echo off
-python "%~dp0..\scripts\run_konnaxion.py" source-audit
+setlocal
+cd /d "%~dp0.."
+python levelupdiag.py run source-audit
 exit /b %ERRORLEVEL%

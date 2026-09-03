@@ -1,4 +1,5 @@
 from __future__ import annotations
+import os
 import re
 from pathlib import Path
 
@@ -8,13 +9,23 @@ API_LITERAL = re.compile(r"['\"](/api/[A-Za-z0-9_./{}?&=:-]+)['\"]")
 ROUTE_REG = re.compile(r"register_(?:required|optional)\(\s*router\s*,\s*['\"]([^'\"]+)['\"]")
 
 
+_EXCLUDED_DIRS={'.git','node_modules','.next','dist','build','coverage','.venv','venv','__pycache__','.cache'}
+
+def _walk_files(root: Path, names: set[str] | None = None, suffixes: tuple[str, ...] = ()):
+    for dirpath, dirnames, filenames in os.walk(root, topdown=True, followlinks=False):
+        dirnames[:] = [d for d in dirnames if d not in _EXCLUDED_DIRS]
+        base=Path(dirpath)
+        for name in filenames:
+            if names is not None and name not in names: continue
+            if suffixes and not name.endswith(suffixes): continue
+            yield base/name
+
 def _files(root: Path):
-    for ext in ('*.ts','*.tsx','*.js','*.jsx'):
-        yield from root.rglob(ext)
+    yield from _walk_files(root, suffixes=('.ts','.tsx','.js','.jsx'))
 
 def backend_prefixes(backend: Path) -> set[str]:
     prefixes=set()
-    for p in backend.rglob('urls.py'):
+    for p in _walk_files(backend, names={'urls.py'}):
         try: text=p.read_text(encoding='utf-8', errors='ignore')
         except OSError: continue
         prefixes.update('/api/'+x.strip('/') for x in ROUTE_REG.findall(text))

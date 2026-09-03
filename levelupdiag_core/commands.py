@@ -1,180 +1,60 @@
-"""Safe external command execution for LevelUpDiag-Koali.
-
-This module owns subprocess creation only.  Commands are passed as argument
-sequences and the normal execution path always uses ``shell=False``.
-"""
-
 from __future__ import annotations
-
-import os
-import shlex
-import shutil
-import subprocess
-from collections.abc import Mapping, Sequence
-from datetime import datetime
+import os, shutil, subprocess, threading, time
+from collections import deque
 from pathlib import Path
-
 from .models import StepResult
-from .verdicts import FAIL, INFRA_ERROR, PASS
+from .verdicts import PASS, FAIL, INFRA_ERROR
 
-_DEFAULT_TAIL_CHARS = 8000
+def find_executable(name): return shutil.which(name)
 
+def _redact(text):
+    import re
+    if not text: return ''
+    text=re.sub(r'(?i)(password|secret|token|private[_-]?key|api[_-]?key|authorization|cookie)(\s*[:=]\s*)([^\s"\';]+)',r'\1\2[REDACTED]',text)
+    text=re.sub(r'(?i)((?:postgres|postgresql|redis)://[^:/\s]+:)[^@\s]+@',r'\1[REDACTED]@',text)
+    return text
 
-def find_executable(name: str) -> str | None:
-    """Return the resolved executable path available on ``PATH``.
-
-    Empty names are rejected instead of being passed to platform lookup APIs.
-    """
-
-    candidate = str(name).strip()
-    if not candidate:
-        return None
-    return shutil.which(candidate)
-
-
-def _command_args(command: Sequence[str]) -> list[str]:
-    if isinstance(command, (str, bytes)):
-        raise TypeError("command must be a sequence of arguments, not a string")
-    args = [os.fspath(item) if isinstance(item, os.PathLike) else item for item in command]
-    if not args:
-        raise ValueError("command must contain at least one argument")
-    if not all(isinstance(item, str) for item in args):
-        raise TypeError("every command argument must be a string or path-like value")
-    if not args[0].strip():
-        raise ValueError("command executable must not be empty")
-    return args
-
-
-def format_command(command: str | Sequence[str]) -> str:
-    """Return a display-only representation of a command.
-
-    This helper never executes the returned string.  String input is accepted
-    only for display compatibility; :func:`run_cmd` itself requires a sequence.
-    """
-
-    if isinstance(command, str):
-        return command
-    args = _command_args(command)
-    if os.name == "nt":
-        return subprocess.list2cmdline(args)
-    return shlex.join(args)
-
-
-def _output_text(value: str | bytes | None) -> str:
-    if value is None:
-        return ""
-    if isinstance(value, bytes):
-        return value.decode("utf-8", errors="replace")
-    return value
-
-
-def _tail(value: str, tail_chars: int) -> str:
-    if tail_chars < 0:
-        raise ValueError("tail_chars must be >= 0")
-    if tail_chars == 0:
-        return ""
-    return value[-tail_chars:]
-
-
-def run_cmd(
-    command: Sequence[str],
-    *,
-    cwd: str | Path | None = None,
-    timeout: int | float = 120,
-    name: str | None = None,
-    env: Mapping[str, str] | None = None,
-    tail_chars: int = _DEFAULT_TAIL_CHARS,
-) -> StepResult:
-    """Execute one external command and normalize its result.
-
-    ``stdout`` and ``stderr`` are captured into one ordered text stream.  A
-    non-zero process exit is a target/check ``FAIL``.  Launch failures and
-    timeouts are infrastructure failures and therefore return ``INFRA_ERROR``.
-    Environment values are passed to the child process but never included in
-    the returned result or formatted output.
-    """
-
-    args = _command_args(command)
-    if timeout <= 0:
-        raise ValueError("timeout must be > 0")
-    if tail_chars < 0:
-        raise ValueError("tail_chars must be >= 0")
-
-    resolved_cwd = Path(cwd).expanduser().resolve() if cwd is not None else Path.cwd().resolve()
-    started = datetime.now().astimezone()
-    started_at = started.isoformat(timespec="seconds")
-    display = format_command(args)
-    label = str(name).strip() if name is not None else ""
-
-    verdict = INFRA_ERROR
-    exit_code: int | None = None
-    output = ""
-    error: str | None = None
-
+def run_cmd(command,*,cwd:Path,timeout:int,name:str='',env=None,tail_chars:int=12000)->StepResult:
+    args=[str(x) for x in command]
+    if not args: raise ValueError('empty command')
+    started=time.monotonic(); lines=deque(); total=[0]; lock=threading.Lock()
     try:
-        completed = subprocess.run(
-            args,
-            cwd=str(resolved_cwd),
-            env=dict(env) if env is not None else None,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=timeout,
-            shell=False,
-            check=False,
-        )
-        exit_code = int(completed.returncode)
-        output = completed.stdout or ""
-        verdict = PASS if exit_code == 0 else FAIL
-    except subprocess.TimeoutExpired as exc:
-        output = _output_text(exc.output)
-        error = f"Command timed out after {timeout} seconds"
-        verdict = INFRA_ERROR
-    except OSError as exc:
-        error = f"{type(exc).__name__}: {exc}"
-        verdict = INFRA_ERROR
-
-    ended = datetime.now().astimezone()
-    if error:
-        diagnostic = f"[{label}] {error}" if label else error
-        output = f"{output.rstrip()}\n{diagnostic}".lstrip("\n")
-
-    return StepResult(
-        verdict=verdict,
-        command=list(args),
-        cwd=str(resolved_cwd),
-        exit_code=exit_code,
-        started_at=started_at,
-        ended_at=ended.isoformat(timespec="seconds"),
-        duration_seconds=round((ended - started).total_seconds(), 6),
-        output_tail=_tail(output, tail_chars),
-        error=error,
-    )
-
-
-def launch_console(
-    command: Sequence[str],
-    cwd: str | Path,
-    title: str = "LevelUpDiag-Koali",
-) -> subprocess.Popen[str]:
-    """Launch a command in a console-capable child process using ``shell=False``.
-
-    On Windows a new console is requested.  ``title`` is retained as part of
-    the stable API but is deliberately not interpolated into a shell command.
-    On other platforms the command is launched directly in the current
-    terminal/session.
-    """
-
-    del title  # Never interpolate user-controlled title text into a shell.
-    args = _command_args(command)
-    resolved_cwd = Path(cwd).expanduser().resolve()
-    kwargs: dict[str, object] = {
-        "cwd": str(resolved_cwd),
-        "shell": False,
-        "text": True,
-    }
-    if os.name == "nt":
-        kwargs["creationflags"] = getattr(subprocess, "CREATE_NEW_CONSOLE", 0x00000010)
-    return subprocess.Popen(args, **kwargs)  # type: ignore[arg-type, return-value]
+        proc=subprocess.Popen(args,cwd=str(cwd),env=env,stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,
+                              text=True,encoding='utf-8',errors='replace',shell=False,bufsize=1)
+    except (OSError,PermissionError) as exc:
+        return StepResult(name or args[0],tuple(args),str(cwd),INFRA_ERROR,None,round(time.monotonic()-started,3),'',f'{type(exc).__name__}: {exc}',False)
+    def reader():
+        assert proc.stdout is not None
+        for line in proc.stdout:
+            with lock:
+                lines.append(line); total[0]+=len(line)
+                while lines and total[0]>max(tail_chars*2,24000): total[0]-=len(lines.popleft())
+    t=threading.Thread(target=reader,daemon=True); t.start()
+    heartbeat=int(os.environ.get('LEVELUPDIAG_HEARTBEAT_SECONDS','15') or '15'); next_hb=time.monotonic()+max(heartbeat,5)
+    timed_out=False
+    while proc.poll() is None:
+        elapsed=time.monotonic()-started
+        if elapsed>=timeout:
+            timed_out=True
+            try: proc.kill()
+            except OSError: pass
+            break
+        if heartbeat>0 and time.monotonic()>=next_hb:
+            print(f"    … {name or args[0]} still running ({int(elapsed)}s)",flush=True)
+            next_hb=time.monotonic()+heartbeat
+        time.sleep(0.1)
+    try: proc.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        try: proc.kill()
+        except OSError: pass
+    t.join(timeout=2)
+    if proc.stdout is not None:
+        try: proc.stdout.close()
+        except OSError: pass
+    with lock: output=''.join(lines)
+    output=_redact(output)[-tail_chars:]
+    duration=round(time.monotonic()-started,3)
+    if timed_out:
+        return StepResult(name or args[0],tuple(args),str(cwd),INFRA_ERROR,None,duration,output,f'timeout after {timeout}s',True)
+    code=proc.returncode
+    return StepResult(name or args[0],tuple(args),str(cwd),PASS if code==0 else FAIL,code,duration,output,'',False)

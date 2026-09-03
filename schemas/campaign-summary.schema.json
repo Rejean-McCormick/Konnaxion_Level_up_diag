@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "levelupdiag.campaign-summary.v2",
+  "type": "object",
+  "required": [
+    "schema",
+    "campaign",
+    "verdict",
+    "expected_levels",
+    "levels",
+    "sequence"
+  ],
+  "properties": {
+    "schema": {
+      "const": "levelupdiag.campaign-summary.v2"
+    },
+    "expected_levels": {
+      "type": "array"
+    },
+    "sequence": {
+      "type": "array"
+    }
+  },
+  "additionalProperties": true
+}

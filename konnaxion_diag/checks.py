@@ -42,7 +42,16 @@ def _find_tool(name: str) -> str | None:
         path = find_executable(candidate)
         if path:
             return path
+    if name == 'pnpm':
+        return find_executable('corepack.cmd' if os.name == 'nt' else 'corepack') or find_executable('corepack')
     return None
+
+def _sha256_file(path: Path) -> str:
+    digest=hashlib.sha256()
+    with path.open('rb') as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b''):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def discovery(config: AppConfig, level_id: str, level_name: str) -> LevelResult:
@@ -215,7 +224,7 @@ def capsule_local(config: AppConfig, level_id: str, level_name: str) -> LevelRes
         findings.append(Finding("kx.capsule.manager-repo",WARN,"Capsule Manager repository not configured; local capsule diagnostics are limited.","capsule"))
     if capsule:
         if capsule.is_file():
-            digest=hashlib.sha256(capsule.read_bytes()).hexdigest()
+            digest=_sha256_file(capsule)
             findings.append(Finding("kx.capsule.file",PASS,"Configured capsule file exists and was hashed.","capsule",path=str(capsule),evidence=f"sha256={digest} size={capsule.stat().st_size}"))
         else:
             findings.append(Finding("kx.capsule.file",WARN,"Configured capsule file does not exist.","capsule",path=str(capsule)))
@@ -271,8 +280,12 @@ def correlation(config: AppConfig, level_id: str, level_name: str) -> LevelResul
     else:
         findings.append(Finding("kx.correlation.session",PASS,f"Correlating current diagnostic session {session_id}.","correlation"))
     failures=[]; warnings=[]; missing=[]
-    for number in range(1,11):
-        lid=f"N{number:02d}"; result=_latest_result(config,lid)
+    expected = session.get("expected_levels", []) if session else []
+    if not isinstance(expected, list) or not expected:
+        expected = [f"N{number:02d}" for number in range(1, 11)]
+    expected = [str(lid) for lid in expected if str(lid) not in {"N00", "N11"}]
+    for lid in expected:
+        result=_latest_result(config,lid)
         if result is None:
             missing.append(lid); continue
         if session_id and str(result.metadata.get("diagnostic_session_id","")) != session_id:
@@ -283,7 +296,7 @@ def correlation(config: AppConfig, level_id: str, level_name: str) -> LevelResul
     if missing:
         findings.append(Finding("kx.correlation.coverage",WARN,"Some diagnostic domains were not executed in the current session.","correlation",evidence=", ".join(missing),recommendation="Run the full-local or connection-debug campaign for broader evidence."))
     else:
-        findings.append(Finding("kx.correlation.coverage",PASS,"All N01-N10 diagnostic domains have current-session evidence.","correlation"))
+        findings.append(Finding("kx.correlation.coverage",PASS,"All diagnostic domains expected by this campaign have current-session evidence.","correlation",evidence=", ".join(expected)))
 
     ids={f.id for _,r in observed for f in r.findings if f.severity in {FAIL,INFRA_ERROR,CONFIG_ERROR,"ERROR"}}
     hypotheses=[]
@@ -307,7 +320,7 @@ def correlation(config: AppConfig, level_id: str, level_name: str) -> LevelResul
         findings.append(Finding("kx.correlation.hypotheses",WARN,"Failures exist but do not match a specialized correlation rule yet.","correlation"))
     else:
         findings.append(Finding("kx.correlation.hypotheses",PASS,"No failure-domain hypothesis required.","correlation"))
-    return make_result(level_id,level_name,started,findings,metadata={"diagnostic_session_id":session_id,"observed_levels":[lid for lid,_ in observed],"hypotheses":hypotheses})
+    return make_result(level_id,level_name,started,findings,metadata={"diagnostic_session_id":session_id,"campaign":session.get("campaign", "") if session else "","expected_levels":expected,"observed_levels":[lid for lid,_ in observed],"hypotheses":hypotheses})
 
 
 CHECKS = {

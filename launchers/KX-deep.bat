@@ -1,4 +1,5 @@
 @echo off
 setlocal
 cd /d "%~dp0.."
-python scripts\run_konnaxion.py deep
+python levelupdiag.py run deep
+exit /b %ERRORLEVEL%

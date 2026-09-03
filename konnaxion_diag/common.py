@@ -238,10 +238,14 @@ def start_session(config: AppConfig) -> str:
     session_id = f"kxdiag-{now().strftime('%Y%m%d_%H%M%S')}-{uuid.uuid4().hex[:8]}"
     path = active_session_path(config)
     path.parent.mkdir(parents=True, exist_ok=True)
+    expected = [x for x in os.environ.get("LEVELUPDIAG_EXPECTED_LEVELS", "").split(",") if x]
     payload = {
         "session_id": session_id,
         "started_at": now().isoformat(timespec="seconds"),
         "target": str(config.target_root_path),
+        "campaign": os.environ.get("LEVELUPDIAG_CAMPAIGN", ""),
+        "expected_levels": expected,
+        "run_id": os.environ.get("LEVELUPDIAG_RUN_ID", ""),
     }
     tmp = path.with_suffix(".tmp")
     tmp.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
