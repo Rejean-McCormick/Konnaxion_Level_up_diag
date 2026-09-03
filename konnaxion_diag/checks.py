@@ -285,6 +285,26 @@ def runtime_smoke(config: AppConfig, level_id: str, level_name: str) -> LevelRes
                     evidence=result.error or f"HTTP {result.status} {result.elapsed_ms}ms",
                 ))
 
+        seed_cmd = command_value(config, "ethikos_seed_workflow") or [
+            "python",
+            "manage.py",
+            "seed_ethikos_workflow",
+        ]
+        seed_finding, _seed_step = command_probe(
+            config,
+            finding_id="kx.runtime.ethikos-seed",
+            label="Ethikos workflow seed",
+            command=seed_cmd,
+            cwd=backend_dir,
+            timeout=300,
+            optional=True,
+            recommendation=(
+                "The authenticated Playwright workflow needs the canonical local "
+                "Ethikos seed data."
+            ),
+        )
+        findings.append(seed_finding)
+
         cmd = command_value(config, "playwright_smoke") or ["pnpm", "run", "smoke:gate"]
         finding, step = command_probe(
             config,
@@ -303,7 +323,7 @@ def runtime_smoke(config: AppConfig, level_id: str, level_name: str) -> LevelRes
             started,
             findings,
             output=step.output_tail if step else "",
-            metadata=session_metadata(config, {"autostarted_runtime": needs_runtime and autostart}),
+            metadata={**session_metadata(config), "autostarted_runtime": needs_runtime and autostart},
         )
     finally:
         for proc in reversed(started_processes):
