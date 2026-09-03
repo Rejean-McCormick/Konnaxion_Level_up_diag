@@ -15,12 +15,38 @@ def _merge(base, overlay):
 def _load(path):
     with path.open('r',encoding='utf-8-sig') as f: return json.load(f)
 
+def _konnaxion_markers(path: Path, data: dict[str, Any]) -> int:
+    section=data.get('konnaxion',{}) if isinstance(data.get('konnaxion',{}),dict) else {}
+    frontend=str(section.get('frontend_dir','frontend'))
+    backend=str(section.get('backend_dir','backend'))
+    score=0
+    if (path/frontend).is_dir(): score += 2
+    if (path/backend).is_dir(): score += 2
+    if (path/frontend/'package.json').is_file(): score += 2
+    if (path/backend/'manage.py').is_file(): score += 2
+    if (path/'.git').exists(): score += 1
+    return score
+
+def _auto_target(root: Path, data: dict[str, Any]) -> Path:
+    # Supported Konnaxion layouts:
+    #   <repo>/LevelUpDiag                 -> target is <repo>
+    #   <workspace>/LevelUpDiag + <workspace>/Konnaxion -> target is sibling Konnaxion
+    parent=root.parent
+    candidates=[parent, parent/'Konnaxion']
+    scored=[(_konnaxion_markers(candidate,data),index,candidate) for index,candidate in enumerate(candidates) if candidate.is_dir()]
+    if scored:
+        score,_,candidate=max(scored,key=lambda item:(item[0],-item[1]))
+        if score >= 4:
+            return candidate
+    # Preserve the generic copy-in behavior when Konnaxion markers are unavailable.
+    return parent
+
 class AppConfig:
     def __init__(self,data:dict[str,Any],root:Path):
         self.data=data; self.diagnostics_root_path=root.resolve()
         raw=data.get('target_repo_root','auto')
         if str(raw).lower()=='auto':
-            target=self.diagnostics_root_path.parent
+            target=_auto_target(self.diagnostics_root_path,data)
         else:
             p=Path(str(raw)).expanduser(); target=p if p.is_absolute() else self.diagnostics_root_path/p
         self.target_root_path=target.resolve(strict=False)

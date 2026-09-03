@@ -2,6 +2,26 @@
 
 This package upgrades the Konnaxion LevelUpDiag Mega Pack onto the evolved LevelUpDiag engine while preserving the Konnaxion-specific diagnostic domains and test order.
 
+## Konnaxion target auto-detection
+
+When `target_repo_root` is `auto`, LevelUpDiag supports both common layouts:
+
+```text
+<Konnaxion repo>/LevelUpDiag/
+```
+
+and the historical workspace layout:
+
+```text
+<workspace>/
+├── LevelUpDiag/
+└── Konnaxion/
+    ├── frontend/
+    └── backend/
+```
+
+It scores Konnaxion markers (`frontend`, `backend`, `package.json`, `manage.py`) and selects the correct target automatically.
+
 ## What is preserved
 
 - Exact Konnaxion taxonomy N00..N11.

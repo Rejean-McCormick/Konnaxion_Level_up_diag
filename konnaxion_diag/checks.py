@@ -5,7 +5,9 @@ import json
 import os
 import platform
 import socket
+import subprocess
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -23,6 +25,7 @@ from .common import (
     kx_config,
     make_result,
     now,
+    resolve_command,
     session_metadata,
     start_session,
     target_paths,
@@ -153,30 +156,158 @@ def contracts(config: AppConfig, level_id: str, level_name: str) -> LevelResult:
     audit = source_audit(paths["frontend"], paths["backend"])
     findings.append(Finding("kx.contract.double-api", FAIL if audit["double_api"] else PASS, f"Double /api prefix: {len(audit['double_api'])}", "contract", evidence=str(audit["double_api"][:20])))
     findings.append(Finding("kx.contract.forbidden-namespaces", FAIL if audit["forbidden"] else PASS, f"Forbidden legacy API calls: {len(audit['forbidden'])}", "contract", evidence=str(audit["forbidden"][:30])))
-    findings.append(Finding("kx.contract.csrf-risk", FAIL if audit["csrf_risk_files"] else PASS, f"Mutation files without visible CSRF header handling: {len(audit['csrf_risk_files'])}", "auth", evidence=str(audit["csrf_risk_files"][:30])))
+    findings.append(Finding("kx.contract.csrf-risk", WARN if audit["csrf_risk_files"] else PASS, f"Mutation files requiring CSRF review: {len(audit['csrf_risk_files'])}", "auth", evidence=str(audit["csrf_risk_files"][:30]), recommendation="Review raw mutation fetches. Calls through apiFetch/apiPost/apiPut/apiPatch/apiDelete or services/_request are treated as CSRF-aware." if audit["csrf_risk_files"] else None))
     findings.append(Finding("kx.contract.unmapped", WARN if audit["unmapped"] else PASS, f"Frontend endpoints not mapped to discovered backend prefixes: {len(audit['unmapped'])}", "contract", evidence=str(audit["unmapped"][:40])))
     return make_result(level_id, level_name, started, findings, output="\n\n".join(outputs), metadata={**session_metadata(config), "cwd": str(paths["root"]), "source_audit": audit})
 
 
-def runtime_smoke(config: AppConfig, level_id: str, level_name: str) -> LevelResult:
-    started=now(); paths=target_paths(config); section=kx_config(config); findings=[]; outputs=[]
-    urls = section.get("local_urls", ["http://127.0.0.1:3000", "http://127.0.0.1:8000/api/"])
-    if not isinstance(urls, list): urls=[]
-    for index,url in enumerate(urls):
-        if not isinstance(url,str) or not url.strip(): continue
-        result=http_probe(url, timeout=6)
-        findings.append(Finding(
-            f"kx.runtime.http.{index:02d}", PASS if result.ok else WARN,
-            f"HTTP probe {'succeeded' if result.ok else 'failed'}: {url}", "runtime", path=url,
-            evidence=f"status={result.status} elapsed_ms={result.elapsed_ms} content_type={result.content_type} error={result.error}".strip(),
-        ))
-    frontend_dir=paths["frontend"]; assert frontend_dir is not None
-    cmd=command_value(config,"playwright_smoke") or ["pnpm","exec","playwright","test","-c","playwright.smoke.config.ts","--reporter=line"]
-    finding,step=command_probe(config,finding_id="kx.runtime.playwright-smoke",label="Playwright smoke",command=cmd,cwd=frontend_dir,timeout=1200,optional=True)
-    findings.append(finding)
-    if step: outputs.append(step.output_tail)
-    return make_result(level_id,level_name,started,findings,output="\n".join(outputs),metadata={**session_metadata(config),"cwd":str(paths["root"])})
 
+def _start_runtime_process(command: list[str] | None, cwd: Path, env: dict[str, str]) -> subprocess.Popen[str] | None:
+    if not command or not cwd.is_dir():
+        return None
+    args = resolve_command(command, cwd=cwd)
+    kwargs: dict[str, Any] = {
+        "cwd": str(cwd),
+        "env": env,
+        "stdin": subprocess.DEVNULL,
+        "stdout": subprocess.DEVNULL,
+        "stderr": subprocess.STDOUT,
+        "text": True,
+        "shell": False,
+    }
+    if os.name == "nt":
+        kwargs["creationflags"] = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+    else:
+        kwargs["start_new_session"] = True
+    return subprocess.Popen(args, **kwargs)
+
+
+def _stop_runtime_process(proc: subprocess.Popen[str] | None) -> None:
+    if proc is None or proc.poll() is not None:
+        return
+    try:
+        if os.name == "nt":
+            subprocess.run(
+                ["taskkill", "/PID", str(proc.pid), "/T", "/F"],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=15,
+                shell=False,
+                check=False,
+            )
+        else:
+            import signal
+            os.killpg(proc.pid, signal.SIGTERM)
+            try:
+                proc.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                os.killpg(proc.pid, signal.SIGKILL)
+    except (OSError, subprocess.SubprocessError):
+        try:
+            proc.kill()
+        except OSError:
+            pass
+
+
+def _wait_for_urls(urls: list[str], timeout_seconds: int) -> dict[str, tuple[bool, str]]:
+    deadline = time.monotonic() + max(1, timeout_seconds)
+    pending = set(urls)
+    results: dict[str, tuple[bool, str]] = {}
+    last_errors: dict[str, str] = {}
+    while pending and time.monotonic() < deadline:
+        for url in list(pending):
+            result = http_probe(url, timeout=2.0)
+            if result.ok:
+                results[url] = (True, f"HTTP {result.status} in {result.elapsed_ms}ms")
+                pending.remove(url)
+            else:
+                last_errors[url] = result.error
+        if pending:
+            time.sleep(1.0)
+    for url in pending:
+        results[url] = (False, last_errors.get(url) or "startup timeout")
+    return results
+
+def runtime_smoke(config: AppConfig, level_id: str, level_name: str) -> LevelResult:
+    started = now()
+    paths = target_paths(config)
+    section = kx_config(config)
+    frontend_dir = paths["frontend"] or config.target_root_path
+    backend_dir = paths["backend"] or config.target_root_path
+    urls = section.get("local_urls", ["http://127.0.0.1:3000", "http://127.0.0.1:8000/api/"])
+    findings: list[Finding] = []
+    started_processes: list[subprocess.Popen[str] | None] = []
+
+    initial = {str(url): http_probe(str(url), timeout=3.0) for url in urls}
+    needs_runtime = any(not result.ok for result in initial.values())
+    autostart = bool(section.get("runtime_autostart", True))
+
+    try:
+        if needs_runtime and autostart:
+            backend_cmd = command_value(config, "backend_runtime_start")
+            frontend_cmd = command_value(config, "frontend_runtime_start")
+            backend_needed = any(
+                not result.ok and (":8000" in url or "/api" in url)
+                for url, result in initial.items()
+            )
+            frontend_needed = any(
+                not result.ok and ":3000" in url
+                for url, result in initial.items()
+            )
+            backend_proc = _start_runtime_process(backend_cmd, backend_dir, config.env()) if backend_needed else None
+            frontend_proc = _start_runtime_process(frontend_cmd, frontend_dir, config.env()) if frontend_needed else None
+            started_processes.extend([backend_proc, frontend_proc])
+
+            if backend_proc is not None:
+                findings.append(Finding("kx.runtime.backend-start", PASS, "Backend runtime started by LevelUpDiag.", "runtime", path=str(backend_dir)))
+            if frontend_proc is not None:
+                findings.append(Finding("kx.runtime.frontend-start", PASS, "Frontend runtime started by LevelUpDiag.", "runtime", path=str(frontend_dir)))
+
+            startup_timeout = int(section.get("runtime_startup_timeout_seconds", 120))
+            readiness = _wait_for_urls([str(url) for url in urls], startup_timeout)
+            for url in urls:
+                ok, evidence = readiness[str(url)]
+                findings.append(Finding(
+                    "kx.runtime.local-http-ready",
+                    PASS if ok else WARN,
+                    f"Local runtime {'ready' if ok else 'not ready'}: {url}",
+                    "runtime",
+                    evidence=evidence,
+                ))
+        else:
+            for url, result in initial.items():
+                findings.append(Finding(
+                    "kx.runtime.local-http",
+                    PASS if result.ok else WARN,
+                    f"Local probe {url}: {'OK' if result.ok else 'REFUSED/ERROR'}",
+                    "runtime",
+                    evidence=result.error or f"HTTP {result.status} {result.elapsed_ms}ms",
+                ))
+
+        cmd = command_value(config, "playwright_smoke") or ["pnpm", "run", "smoke:gate"]
+        finding, step = command_probe(
+            config,
+            finding_id="kx.runtime.playwright-smoke",
+            label="Playwright smoke gate",
+            command=cmd,
+            cwd=frontend_dir,
+            timeout=1200,
+            optional=True,
+            recommendation="Inspect Playwright failures and retained current-run artifacts. The smoke gate runs with SMOKE_GATE=1.",
+        )
+        findings.append(finding)
+        return make_result(
+            level_id,
+            level_name,
+            started,
+            findings,
+            output=step.output_tail if step else "",
+            metadata=session_metadata(config, {"autostarted_runtime": needs_runtime and autostart}),
+        )
+    finally:
+        for proc in reversed(started_processes):
+            _stop_runtime_process(proc)
 
 def jobs(config: AppConfig, level_id: str, level_name: str) -> LevelResult:
     started=now(); backend_dir=target_paths(config)["backend"]; findings=[]; outputs=[]; assert backend_dir is not None

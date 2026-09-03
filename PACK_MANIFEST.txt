@@ -1,4 +1,4 @@
-Konnaxion LevelUpDiag Upgraded v3.0.0
+Konnaxion LevelUpDiag Upgraded v3.0.1
 
 Purpose: evolved LevelUpDiag engine + preserved Konnaxion diagnostic specialization.
 Taxonomy: exact N00..N11.

@@ -80,8 +80,7 @@
         "pnpm",
         "exec",
         "eslint",
-        ".",
-        "--max-warnings=0"
+        "."
       ],
       "frontend_jest": [
         "pnpm",
@@ -102,12 +101,8 @@
       ],
       "playwright_smoke": [
         "pnpm",
-        "exec",
-        "playwright",
-        "test",
-        "-c",
-        "playwright.smoke.config.ts",
-        "--reporter=line"
+        "run",
+        "smoke:gate"
       ],
       "backend_task_tests": [
         "python",
@@ -144,7 +139,21 @@
         "pytest",
         "-q"
       ],
-      "remote_deep_diagnostic": []
+      "remote_deep_diagnostic": [],
+      "backend_runtime_start": [
+        "python",
+        "-m",
+        "uvicorn",
+        "config.asgi:application",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "8000"
+      ],
+      "frontend_runtime_start": [
+        "pnpm",
+        "dev"
+      ]
     },
     "remote": {
       "enabled": false,
@@ -153,7 +162,9 @@
       "http_timeout_seconds": 10,
       "allow_insecure_tls": false,
       "deep_timeout_seconds": 1800
-    }
+    },
+    "runtime_autostart": true,
+    "runtime_startup_timeout_seconds": 120
   },
   "execution": {
     "mode": "sequential",

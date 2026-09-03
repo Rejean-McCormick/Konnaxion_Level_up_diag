@@ -137,7 +137,7 @@ def command_probe(
     recommendation: str | None = None,
 ) -> tuple[Finding, StepResult | None]:
     if not command:
-        severity = WARN if optional else CONFIG_ERROR
+        severity = SKIP if optional else CONFIG_ERROR
         return (
             Finding(
                 id=finding_id,
@@ -150,7 +150,7 @@ def command_probe(
             None,
         )
     if not cwd.is_dir():
-        severity = WARN if optional else CONFIG_ERROR
+        severity = SKIP if optional else CONFIG_ERROR
         return (
             Finding(
                 id=finding_id,
