@@ -7,7 +7,8 @@ from tkinter import filedialog,messagebox,ttk
 PACK_ROOT=Path(__file__).resolve().parent
 DEFAULT_LEVELUP=r"C:\mycode\LevelUpDiag\LevelUpDiag"; DEFAULT_KONNAXION=r"C:\mycode\Konnaxion\Konnaxion"; DEFAULT_CAPSULE_MANAGER=r"C:\mycode\Konnaxion\Konnaxion_Capsule_Manager"
 DIRS=("levelupdiag_core","konnaxion_diag","levels","scripts","launchers","docs","schemas","tests")
-FILES=("levelupdiag.py","levelupdiag_manifest.json","levelupdiag.config.json","levelupdiag.config.example.json","README.md","RUN_KONNAXION_LEVELUPDIAG.bat","RUN_KONNAXION_LEVELUPDIAG.sh",".gitignore",".smartignore")
+FILES=("levelupdiag.py","LEVELUPDIAG_CONSOLE.pyw","levelupdiag_manifest.json","levelupdiag.config.json","levelupdiag.config.example.json","README.md","RUN_KONNAXION_LEVELUPDIAG.bat","RUN_KONNAXION_LEVELUPDIAG.sh",".gitignore",".smartignore")
+OBSOLETE_FILES=("INSTALL_AND_CONFIGURE_KONNAXION_MEGAPACK.pyw","CONFIGURE_KONNAXION_MEGAPACK.ps1","INSTALL_MEGAPACK.ps1")
 def install_and_configure(levelup,konnaxion,capsule_manager,capsule_file=''):
     levelup=Path(levelup).expanduser().resolve(); kx=Path(konnaxion).expanduser().resolve(); cm=Path(capsule_manager).expanduser().resolve()
     for p,n in ((levelup,'LevelUpDiag'),(kx,'Konnaxion'),(cm,'Capsule Manager')):
@@ -24,6 +25,10 @@ def install_and_configure(levelup,konnaxion,capsule_manager,capsule_file=''):
         if dst.exists():
             (backup/f).parent.mkdir(parents=True,exist_ok=True); shutil.copy2(dst,backup/f)
         shutil.copy2(src,dst)
+    for f in OBSOLETE_FILES:
+        dst=levelup/f
+        if dst.exists():
+            shutil.copy2(dst,backup/f); dst.unlink()
     cfg=json.loads((levelup/'levelupdiag.config.example.json').read_text(encoding='utf-8-sig')); cfg['target_repo_root']=str(kx); cfg['konnaxion']['capsule_manager_repo']=str(cm); cfg['konnaxion']['capsule_file']=capsule_file.strip()
     local.write_text(json.dumps(cfg,indent=2,ensure_ascii=False)+'\n',encoding='utf-8')
     return backup,local

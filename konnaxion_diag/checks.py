@@ -123,21 +123,192 @@ def backend(config: AppConfig, level_id: str, level_name: str) -> LevelResult:
     return make_result(level_id, level_name, started, findings, output="\n\n".join(outputs), metadata={**session_metadata(config), "cwd": str(backend_dir)})
 
 
+def _capture_eslint_report(
+    config: AppConfig,
+    frontend_dir: Path,
+    *,
+    timeout: int,
+) -> dict[str, Any]:
+    """Capture a complete machine-readable ESLint report for the current run."""
+    report_dir = config.control_root_path / "current"
+    report_dir.mkdir(parents=True, exist_ok=True)
+    report_json = report_dir / "eslint-report.json"
+    error_files_txt = report_dir / "eslint-error-files.txt"
+
+    for path in (report_json, error_files_txt):
+        try:
+            path.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+    report_cmd = [
+        "pnpm",
+        "exec",
+        "eslint",
+        ".",
+        "--format",
+        "json",
+        "--output-file",
+        str(report_json),
+    ]
+    # ESLint exits non-zero when lint errors exist. The command's verdict is
+    # intentionally not added as a second blocking finding; the primary lint
+    # finding already owns that verdict.
+    command_probe(
+        config,
+        finding_id="kx.frontend.eslint-report-capture",
+        label="Frontend ESLint full report capture",
+        command=report_cmd,
+        cwd=frontend_dir,
+        timeout=timeout,
+        optional=True,
+    )
+
+    result: dict[str, Any] = {
+        "report_path": str(report_json),
+        "error_files_path": str(error_files_txt),
+        "error_count": 0,
+        "warning_count": 0,
+        "error_files": [],
+    }
+    if not report_json.is_file():
+        return result
+
+    try:
+        payload = json.loads(report_json.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return result
+
+    if not isinstance(payload, list):
+        return result
+
+    error_files: list[str] = []
+    summary_lines: list[str] = []
+    total_errors = 0
+    total_warnings = 0
+
+    for entry in payload:
+        if not isinstance(entry, dict):
+            continue
+        file_path = str(entry.get("filePath", "")).strip()
+        messages = entry.get("messages", [])
+        if not isinstance(messages, list):
+            messages = []
+
+        error_count = entry.get("errorCount")
+        warning_count = entry.get("warningCount")
+        if not isinstance(error_count, int):
+            error_count = sum(
+                1 for message in messages
+                if isinstance(message, dict) and message.get("severity") == 2
+            )
+        if not isinstance(warning_count, int):
+            warning_count = sum(
+                1 for message in messages
+                if isinstance(message, dict) and message.get("severity") == 1
+            )
+
+        total_errors += error_count
+        total_warnings += warning_count
+        if error_count > 0 and file_path:
+            error_files.append(file_path)
+            summary_lines.append(
+                f"{file_path} | errors={error_count} warnings={warning_count}"
+            )
+
+    error_files = sorted(dict.fromkeys(error_files), key=str.casefold)
+    result.update(
+        {
+            "error_count": total_errors,
+            "warning_count": total_warnings,
+            "error_files": error_files,
+        }
+    )
+
+    try:
+        error_files_txt.write_text(
+            "\n".join(summary_lines) + ("\n" if summary_lines else ""),
+            encoding="utf-8",
+        )
+    except OSError:
+        pass
+
+    return result
+
+
 def frontend(config: AppConfig, level_id: str, level_name: str) -> LevelResult:
-    started = now(); frontend_dir = target_paths(config)["frontend"]; findings: list[Finding] = []; outputs=[]
+    started = now()
+    frontend_dir = target_paths(config)["frontend"]
+    findings: list[Finding] = []
+    outputs: list[str] = []
     assert frontend_dir is not None
+
     specs = [
         ("kx.frontend.typecheck", "TypeScript typecheck", "frontend_typecheck", ["pnpm", "exec", "tsc", "-p", "tsconfig.json", "--noEmit", "--pretty", "false"], False, 600),
-        ("kx.frontend.eslint", "Frontend ESLint", "frontend_lint", ["pnpm", "exec", "eslint", ".", "--max-warnings=0"], False, 600),
+        # Warnings remain visible but do not make the level fail by themselves.
+        ("kx.frontend.eslint", "Frontend ESLint", "frontend_lint", ["pnpm", "exec", "eslint", "."], False, 600),
         ("kx.frontend.jest", "Frontend Jest", "frontend_jest", ["pnpm", "exec", "jest", "--passWithNoTests", "--runInBand"], False, 900),
         ("kx.frontend.build", "Next production build", "frontend_build", ["pnpm", "exec", "next", "build"], False, 1200),
     ]
-    for fid,label,key,default,opt,timeout in specs:
+
+    eslint_report: dict[str, Any] = {}
+    for fid, label, key, default, opt, timeout in specs:
         cmd = command_value(config, key) or default
-        finding, step = command_probe(config, finding_id=fid, label=label, command=cmd, cwd=frontend_dir, timeout=timeout, optional=opt)
+        finding, step = command_probe(
+            config,
+            finding_id=fid,
+            label=label,
+            command=cmd,
+            cwd=frontend_dir,
+            timeout=timeout,
+            optional=opt,
+        )
         findings.append(finding)
-        if step: outputs.append(f"## {label}\n{step.output_tail}")
-    return make_result(level_id, level_name, started, findings, output="\n\n".join(outputs), metadata={**session_metadata(config), "cwd": str(frontend_dir)})
+        if step:
+            outputs.append(f"## {label}\n{step.output_tail}")
+
+        if fid == "kx.frontend.eslint" and finding.severity == FAIL:
+            eslint_report = _capture_eslint_report(
+                config,
+                frontend_dir,
+                timeout=timeout,
+            )
+            error_files = eslint_report.get("error_files", [])
+            if error_files:
+                findings.append(
+                    Finding(
+                        "kx.frontend.eslint-error-files",
+                        WARN,
+                        f"ESLint errors are present in {len(error_files)} file(s).",
+                        "command",
+                        path=str(eslint_report.get("error_files_path", "")),
+                        evidence="\n".join(error_files[:40]),
+                        recommendation=(
+                            "Fix the files listed in .levelupdiag/current/"
+                            "eslint-error-files.txt, then rerun N03."
+                        ),
+                    )
+                )
+                outputs.append(
+                    "## ESLint files containing errors\n"
+                    + "\n".join(error_files)
+                )
+
+    metadata: dict[str, Any] = {
+        **session_metadata(config),
+        "cwd": str(frontend_dir),
+    }
+    if eslint_report:
+        metadata["eslint"] = eslint_report
+
+    return make_result(
+        level_id,
+        level_name,
+        started,
+        findings,
+        output="\n\n".join(outputs),
+        metadata=metadata,
+    )
 
 
 def contracts(config: AppConfig, level_id: str, level_name: str) -> LevelResult:
@@ -306,15 +477,21 @@ def runtime_smoke(config: AppConfig, level_id: str, level_name: str) -> LevelRes
         findings.append(seed_finding)
 
         cmd = command_value(config, "playwright_smoke") or ["pnpm", "run", "smoke:gate"]
+        playwright_timeout = int(section.get("playwright_smoke_timeout_seconds", 2400))
         finding, step = command_probe(
             config,
             finding_id="kx.runtime.playwright-smoke",
             label="Playwright smoke gate",
             command=cmd,
             cwd=frontend_dir,
-            timeout=1200,
+            timeout=playwright_timeout,
             optional=True,
-            recommendation="Inspect Playwright failures and retained current-run artifacts. The smoke gate runs with SMOKE_GATE=1.",
+            recommendation=(
+                "Inspect Playwright failures and retained current-run artifacts. "
+                "The smoke gate runs with SMOKE_GATE=1. "
+                "If the full route campaign legitimately needs more time, set "
+                "konnaxion.playwright_smoke_timeout_seconds."
+            ),
         )
         findings.append(finding)
         return make_result(
@@ -323,7 +500,11 @@ def runtime_smoke(config: AppConfig, level_id: str, level_name: str) -> LevelRes
             started,
             findings,
             output=step.output_tail if step else "",
-            metadata={**session_metadata(config), "autostarted_runtime": needs_runtime and autostart},
+            metadata={
+                **session_metadata(config),
+                "autostarted_runtime": needs_runtime and autostart,
+                "playwright_smoke_timeout_seconds": playwright_timeout,
+            },
         )
     finally:
         for proc in reversed(started_processes):

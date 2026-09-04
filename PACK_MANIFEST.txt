@@ -10,3 +10,6 @@ Runtime evidence retention: current_only; legacy logs/runs are not retained.
 Remote diagnostics: disabled by default.
 Destructive deployment/restart/restore operations: none.
 N11 correlation: campaign-aware; correlates only expected current-session levels.
+
+Graphical selector: LEVELUPDIAG_CONSOLE.pyw (campaigns + individual N00..N11 selection).
+Legacy MegaPack aliases removed: installer/configure wrapper names are obsolete.

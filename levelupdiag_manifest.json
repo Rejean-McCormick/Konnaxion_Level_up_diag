@@ -3,7 +3,7 @@
   "standard": "LevelUpDiag",
   "standard_version": "2.0.0-konnaxion",
   "suite_name": "Konnaxion LevelUpDiag — Upgraded",
-  "suite_version": "3.0.0",
+  "suite_version": "3.0.1",
   "repository_mode": "copy-in-or-standalone-diagnostics-suite",
   "control_dir_default": ".levelupdiag",
   "retention_default": "current_only",

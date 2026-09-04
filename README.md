@@ -85,3 +85,26 @@ Only current evidence is retained:
 ```
 
 No historical run archive is maintained by default.
+
+## Console graphique de sélection
+
+Le root inclut maintenant `LEVELUPDIAG_CONSOLE.pyw`. Sous Windows, un double-clic ouvre une console graphique inspirée du modèle fourni :
+
+- sélection d'une campagne depuis le manifest ;
+- sélection manuelle de niveaux N00..N11 ;
+- presets Source audit, Auth debug, Connection debug et Full local ;
+- sortie du diagnostic en direct ;
+- arrêt du processus ;
+- ouverture directe du dossier de preuves `.levelupdiag/current`.
+
+La console lance le même moteur `levelupdiag.py`; elle ne duplique pas les tests.
+
+## Nettoyage des alias historiques
+
+Les anciens alias `MegaPack` ont été retirés du root et sont supprimés lors d'un upgrade après sauvegarde :
+
+- `INSTALL_AND_CONFIGURE_KONNAXION_MEGAPACK.pyw`
+- `CONFIGURE_KONNAXION_MEGAPACK.ps1`
+- `INSTALL_MEGAPACK.ps1`
+
+Les noms LevelUpDiag v3 sont désormais les seules entrées d'installation/configuration conservées.

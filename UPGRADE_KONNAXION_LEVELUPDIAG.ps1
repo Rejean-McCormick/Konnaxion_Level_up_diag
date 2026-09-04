@@ -13,10 +13,18 @@ foreach ($Dir in $Dirs) {
     if (Test-Path $Dest) { Move-Item -Force $Dest (Join-Path $Backup $Dir) }
     Copy-Item -Recurse -Force (Join-Path $PackRoot $Dir) $Dest
 }
-foreach ($File in @("levelupdiag.py","levelupdiag_manifest.json","levelupdiag.config.json","levelupdiag.config.example.json","README.md","RUN_KONNAXION_LEVELUPDIAG.bat","RUN_KONNAXION_LEVELUPDIAG.sh",".gitignore",".smartignore")) {
+foreach ($File in @("levelupdiag.py","LEVELUPDIAG_CONSOLE.pyw","levelupdiag_manifest.json","levelupdiag.config.json","levelupdiag.config.example.json","README.md","RUN_KONNAXION_LEVELUPDIAG.bat","RUN_KONNAXION_LEVELUPDIAG.sh",".gitignore",".smartignore")) {
     $Src=Join-Path $PackRoot $File; $Dst=Join-Path $Target $File
     if (Test-Path $Dst) { Copy-Item -Force $Dst (Join-Path $Backup $File) }
     Copy-Item -Force $Src $Dst
+}
+
+foreach ($Obsolete in @("INSTALL_AND_CONFIGURE_KONNAXION_MEGAPACK.pyw","CONFIGURE_KONNAXION_MEGAPACK.ps1","INSTALL_MEGAPACK.ps1")) {
+    $Old = Join-Path $Target $Obsolete
+    if (Test-Path $Old) {
+        Copy-Item -Force $Old (Join-Path $Backup $Obsolete)
+        Remove-Item -Force $Old
+    }
 }
 if (Test-Path (Join-Path $Backup "levelupdiag.config.local.json")) { Copy-Item -Force (Join-Path $Backup "levelupdiag.config.local.json") $Preserve }
 Get-ChildItem -Path $Target -Recurse -Directory -Filter "__pycache__" -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
