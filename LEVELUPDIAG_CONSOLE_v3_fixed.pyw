@@ -14,11 +14,72 @@ from typing import Any
 
 TOOL_ROOT = Path(__file__).resolve().parent
 MANIFEST_PATH = TOOL_ROOT / "levelupdiag_manifest.json"
+MANIFEST_BACKUP_PATH = TOOL_ROOT / ".levelupdiag_manifest.console-backup.json"
+CUSTOM_CAMPAIGN_NAME = "console-custom"
 CONFIG_CANDIDATES = (
     TOOL_ROOT / "levelupdiag.config.local.json",
     TOOL_ROOT / "levelupdiag.config.json",
     TOOL_ROOT / "levelupdiag.config.example.json",
 )
+
+
+def _ordered_level_ids(manifest: dict[str, Any]) -> list[str]:
+    levels = manifest.get("levels", [])
+    if not isinstance(levels, list):
+        return []
+    valid = [item for item in levels if isinstance(item, dict) and isinstance(item.get("id"), str)]
+    valid.sort(key=lambda item: (item.get("order", 0), item.get("id", "")))
+    return [str(item["id"]) for item in valid]
+
+
+def _expand_dependencies(manifest: dict[str, Any], selected: list[str]) -> list[str]:
+    level_map = {
+        str(item.get("id")): item
+        for item in manifest.get("levels", [])
+        if isinstance(item, dict) and isinstance(item.get("id"), str)
+    }
+    wanted = set(selected)
+    pending = list(selected)
+    while pending:
+        level_id = pending.pop()
+        level = level_map.get(level_id, {})
+        depends_on = level.get("depends_on", [])
+        if not isinstance(depends_on, list):
+            continue
+        for dependency in depends_on:
+            if isinstance(dependency, str) and dependency in level_map and dependency not in wanted:
+                wanted.add(dependency)
+                pending.append(dependency)
+    return [level_id for level_id in _ordered_level_ids(manifest) if level_id in wanted]
+
+
+def _matching_campaign(manifest: dict[str, Any], selected: list[str]) -> str | None:
+    campaigns = manifest.get("campaigns", {})
+    if not isinstance(campaigns, dict):
+        return None
+    for name, data in campaigns.items():
+        if not isinstance(name, str) or not isinstance(data, dict):
+            continue
+        levels = data.get("levels", [])
+        if isinstance(levels, list) and [str(item) for item in levels] == selected:
+            return name
+    return None
+
+
+def _manifest_with_custom_campaign(
+    manifest: dict[str, Any],
+    selected: list[str],
+) -> dict[str, Any]:
+    updated = json.loads(json.dumps(manifest))
+    campaigns = updated.setdefault("campaigns", {})
+    if not isinstance(campaigns, dict):
+        raise ValueError("Le champ campaigns du manifest doit être un objet JSON.")
+    campaigns[CUSTOM_CAMPAIGN_NAME] = {
+        "description": "Sélection temporaire créée par LEVELUPDIAG_CONSOLE.pyw.",
+        "execution": "sequential",
+        "levels": selected,
+    }
+    return updated
 
 
 class LevelUpDiagConsole(tk.Tk):
@@ -39,6 +100,7 @@ class LevelUpDiagConsole(tk.Tk):
         self.evidence_var = tk.StringVar(value="Preuves: —")
 
         self._build_ui()
+        self._recover_stale_manifest_backup()
         self._load_manifest()
         self.after(80, self._poll_output)
         self.protocol("WM_DELETE_WINDOW", self._on_close)
@@ -299,16 +361,50 @@ class LevelUpDiagConsole(tk.Tk):
         if not selected:
             messagebox.showwarning("LevelUpDiag", "Sélectionne au moins un test/niveau.")
             return
-        selection = ",".join(selected)
-        self._start_command(["run", selection], selection)
 
-    def _start_command(self, arguments: list[str], label: str) -> None:
+        expanded = _expand_dependencies(self.manifest, selected)
+        added = [level_id for level_id in expanded if level_id not in selected]
+        if added:
+            self._append(
+                "\n[Dépendances ajoutées automatiquement] " + " → ".join(added) + "\n"
+            )
+
+        campaign = _matching_campaign(self.manifest, expanded)
+        restore_manifest = False
+        if campaign is None:
+            try:
+                self._install_custom_campaign(expanded)
+            except Exception as exc:
+                messagebox.showerror(
+                    "LevelUpDiag",
+                    f"Impossible de préparer la campagne personnalisée:\n{exc}",
+                )
+                return
+            campaign = CUSTOM_CAMPAIGN_NAME
+            restore_manifest = True
+
+        label = " → ".join(expanded)
+        self._start_command(
+            ["run", campaign],
+            label,
+            restore_manifest=restore_manifest,
+        )
+
+    def _start_command(
+        self,
+        arguments: list[str],
+        label: str,
+        *,
+        restore_manifest: bool = False,
+    ) -> None:
         if self.process is not None:
             messagebox.showinfo("LevelUpDiag", "Un diagnostic est déjà en cours.")
             return
 
         runner = TOOL_ROOT / "levelupdiag.py"
         if not runner.is_file():
+            if restore_manifest:
+                self._restore_manifest_backup()
             messagebox.showerror("LevelUpDiag", f"Lanceur introuvable:\n{runner}")
             return
 
@@ -317,9 +413,13 @@ class LevelUpDiagConsole(tk.Tk):
         self.status_var.set(f"Exécution: {label}")
         self.run_button.configure(state="disabled")
         self.stop_button.configure(state="normal")
-        threading.Thread(target=self._worker, args=(command,), daemon=True).start()
+        threading.Thread(
+            target=self._worker,
+            args=(command, restore_manifest),
+            daemon=True,
+        ).start()
 
-    def _worker(self, command: list[str]) -> None:
+    def _worker(self, command: list[str], restore_manifest: bool = False) -> None:
         try:
             creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
             process = subprocess.Popen(
@@ -343,6 +443,8 @@ class LevelUpDiagConsole(tk.Tk):
         except Exception as exc:
             self.output_queue.put(("error", str(exc)))
         finally:
+            if restore_manifest:
+                self._restore_manifest_backup()
             self.process = None
 
     def _poll_output(self) -> None:
@@ -390,6 +492,51 @@ class LevelUpDiagConsole(tk.Tk):
         self.console.insert("end", text)
         self.console.see("end")
         self.console.configure(state="disabled")
+
+    def _recover_stale_manifest_backup(self) -> None:
+        if not MANIFEST_BACKUP_PATH.is_file():
+            return
+        try:
+            original = MANIFEST_BACKUP_PATH.read_bytes()
+            temp = MANIFEST_PATH.with_suffix(MANIFEST_PATH.suffix + ".restore.tmp")
+            temp.write_bytes(original)
+            os.replace(temp, MANIFEST_PATH)
+            MANIFEST_BACKUP_PATH.unlink(missing_ok=True)
+        except OSError as exc:
+            messagebox.showwarning(
+                "LevelUpDiag",
+                f"Impossible de restaurer un ancien backup de manifest:\n{exc}",
+            )
+
+    def _install_custom_campaign(self, selected: list[str]) -> None:
+        if MANIFEST_BACKUP_PATH.exists():
+            self._recover_stale_manifest_backup()
+
+        original = MANIFEST_PATH.read_bytes()
+        manifest = json.loads(original.decode("utf-8-sig"))
+        if not isinstance(manifest, dict):
+            raise ValueError("Le manifest LevelUpDiag doit être un objet JSON.")
+
+        updated = _manifest_with_custom_campaign(manifest, selected)
+        MANIFEST_BACKUP_PATH.write_bytes(original)
+        temp = MANIFEST_PATH.with_suffix(MANIFEST_PATH.suffix + ".console.tmp")
+        temp.write_text(
+            json.dumps(updated, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+        os.replace(temp, MANIFEST_PATH)
+
+    def _restore_manifest_backup(self) -> None:
+        if not MANIFEST_BACKUP_PATH.is_file():
+            return
+        try:
+            original = MANIFEST_BACKUP_PATH.read_bytes()
+            temp = MANIFEST_PATH.with_suffix(MANIFEST_PATH.suffix + ".restore.tmp")
+            temp.write_bytes(original)
+            os.replace(temp, MANIFEST_PATH)
+            MANIFEST_BACKUP_PATH.unlink(missing_ok=True)
+        except OSError as exc:
+            self.output_queue.put(("line", f"\n[AVERTISSEMENT] Restauration du manifest impossible: {exc}\n"))
 
     def _load_config(self) -> dict[str, Any]:
         for path in CONFIG_CANDIDATES:
@@ -473,6 +620,7 @@ class LevelUpDiagConsole(tk.Tk):
                 self.process.terminate()
             except OSError:
                 pass
+        self._restore_manifest_backup()
         self.destroy()
 
 

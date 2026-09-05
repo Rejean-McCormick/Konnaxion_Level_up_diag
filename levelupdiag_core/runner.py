@@ -13,10 +13,26 @@ _HARD_DEP={BLOCKED,CONFIG_ERROR,ERROR,INFRA_ERROR}
 def _now(): return datetime.now().astimezone().isoformat(timespec='seconds')
 def _run_id(): return datetime.now().astimezone().strftime('%Y%m%dT%H%M%S')+'-'+uuid.uuid4().hex[:8]
 
-def _tracked_status(target:Path):
+def _tracked_status(target:Path, ignored_roots=()):
     if not (target/'.git').exists() or shutil.which('git') is None: return None
     try:
-        cp=subprocess.run(['git','status','--porcelain=v1','--untracked-files=no'],cwd=str(target),stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,text=True,encoding='utf-8',errors='replace',timeout=15,shell=False,check=False)
+        cmd=['git','status','--porcelain=v1','--untracked-files=no']
+        exclusions=[]
+        target_resolved=target.resolve(strict=False)
+        for ignored in ignored_roots:
+            try:
+                rel=Path(ignored).resolve(strict=False).relative_to(target_resolved)
+            except ValueError:
+                continue
+            rel_posix=rel.as_posix().strip('/')
+            if rel_posix and rel_posix != '.':
+                exclusions.extend([
+                    f':(top,exclude){rel_posix}',
+                    f':(top,exclude){rel_posix}/**',
+                ])
+        if exclusions:
+            cmd.extend(['--','.',*exclusions])
+        cp=subprocess.run(cmd,cwd=str(target),stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,text=True,encoding='utf-8',errors='replace',timeout=15,shell=False,check=False)
         return cp.stdout if cp.returncode==0 else None
     except (OSError,subprocess.TimeoutExpired): return None
 
@@ -44,7 +60,7 @@ def run_campaign(campaign,levels=None,config:AppConfig|None=None):
         levels=list(levels); mode='sequential'
     expected=[str(x) for x in levels]
     control=config.control_root_path; exec_cfg=config.get('execution',{}) if isinstance(config.get('execution',{}),dict) else {}
-    before_tracked=_tracked_status(config.target_root_path) if exec_cfg.get('protect_tracked_files',True) else None
+    before_tracked=_tracked_status(config.target_root_path,(control,)) if exec_cfg.get('protect_tracked_files',True) else None
     _cleanup_runtime(control,bool(exec_cfg.get('purge_legacy_evidence',True)))
     current=control/'current'; latest=control/'latest'; current.mkdir(parents=True,exist_ok=True); latest.mkdir(parents=True,exist_ok=True)
     run_id=_run_id(); started=_now(); results=[]; by_id={}
@@ -75,7 +91,7 @@ def run_campaign(campaign,levels=None,config:AppConfig|None=None):
         by_id[spec.id]=result; results.append(result)
         latest_file=latest/spec.id.lower()/'result.json'; latest_file.parent.mkdir(parents=True,exist_ok=True); shutil.copy2(output,latest_file)
     verdict=aggregate_verdicts([r.verdict for r in results])
-    after_tracked=_tracked_status(config.target_root_path) if before_tracked is not None else None
+    after_tracked=_tracked_status(config.target_root_path,(control,)) if before_tracked is not None else None
     protection=None
     if before_tracked is not None and after_tracked is not None and before_tracked != after_tracked:
         protection={'verdict':'ERROR','message':'Tracked Git state changed during diagnostics.','before':before_tracked,'after':after_tracked}
